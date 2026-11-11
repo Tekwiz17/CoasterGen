@@ -568,7 +568,7 @@ export default function ImportDialog({
         )}
         {shown && (
           <>
-            <details className="disclosure" open>
+            <details className="disclosure">
               <summary>
                 Filament colors <span>Click a swatch to change it</span>
               </summary>
@@ -599,7 +599,7 @@ export default function ImportDialog({
                 }}
               />
             </details>
-            <details className="disclosure" open>
+            <details className="disclosure">
               <summary>
                 Map image colors <span>Image color → filament</span>
               </summary>

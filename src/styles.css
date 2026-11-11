@@ -2462,3 +2462,7 @@ fieldset.import-settings {
   width: 100%;
   margin-top: 5px;
 }
+
+.image-cleanup.filling.erasing canvas {
+  cursor: crosshair;
+}

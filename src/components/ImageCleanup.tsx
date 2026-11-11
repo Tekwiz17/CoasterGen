@@ -325,7 +325,9 @@ export default function ImageCleanup({
       <div
         ref={host}
         className={
-          "image-cleanup" + (active ? (moving ? " moving" : " erasing") : "")
+          "image-cleanup" +
+          (active && tool === "fill" ? " filling" : "") +
+          (active ? (moving ? " moving" : " erasing") : "")
         }
       >
         <div
