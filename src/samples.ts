@@ -1,38 +1,74 @@
 const svg = (body: string) =>
-  `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 400">${body}</svg>`;
+  '<svg xmlns="http://www.w3.org/2000/svg" width="400" height="400" viewBox="0 0 400 400">' +
+  body +
+  "</svg>";
+const frame = (body: string) =>
+  '<defs><clipPath id="disc"><circle cx="200" cy="200" r="174"/></clipPath></defs><g clip-path="url(#disc)">' +
+  body +
+  "</g>";
+// Deliberately broad filled shapes and strokes: all features remain printable
+// at a typical 100 mm coaster size, without hairlines or ambiguous SVG fills.
 export const SAMPLES = [
   {
     id: "sunset",
-    name: "Golden hour",
-    subtitle: "A little mountain escape",
+    name: "Solstice",
+    subtitle: "Sun and architectural arches",
     svg: svg(
-      `<defs><clipPath id="c"><circle cx="200" cy="200" r="184"/></clipPath></defs><g clip-path="url(#c)"><circle cx="200" cy="200" r="184" fill="#DFAB49"/><circle cx="252" cy="144" r="61" fill="#D6603F"/><path d="M5 283 129 137 268 298Z" fill="#263D39"/><path d="m95 177 34-40 35 41-25-8-11 14-15-14Z" fill="#F2E9D8"/><path d="m173 291 89-100 149 174H0Z" fill="#D6603F"/><path d="m234 223 28-32 29 34-19-6-10 11-13-12Z" fill="#F2E9D8"/><path d="M-2 322q105-77 209-8t211-7v98H0Z" fill="#263D39"/><path d="M-12 352q113-61 216-4t213-2" fill="none" stroke="#F2E9D8" stroke-width="8"/><path d="M25 100h89m-62 21h37m212 121h62" stroke="#F2E9D8" stroke-width="7" stroke-linecap="round"/></g>`,
+      '<circle cx="200" cy="200" r="174" fill="#263D39"/>' +
+        '<path d="M85 316V180a115 115 0 0 1 230 0v136h-27V180a88 88 0 0 0-176 0v136Z" fill="#F2E9D8"/>' +
+        '<circle cx="200" cy="174" r="58" fill="#DFAB49"/>' +
+        '<path d="M137 316v-75h126v75Z" fill="#D6603F"/>' +
+        '<path d="M137 254h126v12H137Zm0 29h126v12H137Z" fill="#263D39"/>' +
+        '<path d="M120 331h160v12H120Z" fill="#DFAB49"/>',
     ),
   },
   {
     id: "bloom",
-    name: "Flower power",
-    subtitle: "Something for your desk",
+    name: "Ginkgo",
+    subtitle: "Botanical fan leaves",
     svg: svg(
-      `<g fill="#D6603F"><ellipse cx="200" cy="114" rx="43" ry="88"/><ellipse cx="200" cy="286" rx="43" ry="88"/><ellipse cx="114" cy="200" rx="88" ry="43"/><ellipse cx="286" cy="200" rx="88" ry="43"/><ellipse cx="139" cy="139" rx="43" ry="88" transform="rotate(-45 139 139)"/><ellipse cx="261" cy="261" rx="43" ry="88" transform="rotate(-45 261 261)"/><ellipse cx="139" cy="261" rx="43" ry="88" transform="rotate(45 139 261)"/><ellipse cx="261" cy="139" rx="43" ry="88" transform="rotate(45 261 139)"/></g><circle cx="200" cy="200" r="68" fill="#DFAB49"/><circle cx="177" cy="188" r="9" fill="#263D39"/><circle cx="223" cy="188" r="9" fill="#263D39"/><path d="M172 219q28 29 56 0" fill="none" stroke="#263D39" stroke-width="8" stroke-linecap="round"/>`,
+      '<circle cx="200" cy="200" r="174" fill="#DFAB49"/>' +
+        '<path d="M207 326c-8-81-9-152 9-224" fill="none" stroke="#263D39" stroke-width="12" stroke-linecap="round"/>' +
+        '<path d="M204 237C91 219 51 143 91 96c27-32 67-23 87-4 24-44 78-35 91-1 27-8 69 9 67 45-4 62-69 92-132 101Z" fill="#263D39"/>' +
+        '<path d="M206 223c-12-55-38-97-66-123m65 123c-2-49 7-90 31-126m-29 126c39-27 68-54 92-83" fill="none" stroke="#F2E9D8" stroke-width="8" stroke-linecap="round"/>' +
+        '<path d="M201 291c-56 6-95-14-105-49 43-27 90-12 105 49Z" fill="#D6603F"/>' +
+        '<path d="M203 292c31-50 78-62 111-39-14 37-58 52-111 39Z" fill="#D6603F"/>',
     ),
   },
   {
     id: "waves",
-    name: "Slow tides",
-    subtitle: "Go with the flow",
+    name: "Tidal",
+    subtitle: "Layered waves and a setting sun",
     svg: svg(
-      `<defs><clipPath id="w"><circle cx="200" cy="200" r="182"/></clipPath></defs><g clip-path="url(#w)"><circle cx="200" cy="200" r="182" fill="#DFAB49"/><circle cx="125" cy="120" r="48" fill="#D6603F"/><path d="M0 210q50-65 100 0t100 0 100 0 100 0v200H0Z" fill="#263D39"/><path d="M0 255q50-65 100 0t100 0 100 0 100 0v170H0Z" fill="#F2E9D8"/><path d="M0 300q50-65 100 0t100 0 100 0 100 0v150H0Z" fill="#D6603F"/><path d="M0 343q50-65 100 0t100 0 100 0 100 0v100H0Z" fill="#263D39"/></g>`,
+      frame(
+        '<circle cx="200" cy="200" r="174" fill="#DFAB49"/>' +
+          '<circle cx="233" cy="132" r="48" fill="#D6603F"/>' +
+          '<path d="M20 211C86 150 122 151 189 206S300 262 380 194V390H20Z" fill="#263D39"/>' +
+          '<path d="M20 253C87 193 125 196 191 247S307 301 380 237V390H20Z" fill="#F2E9D8"/>' +
+          '<path d="M20 296C87 237 126 239 191 290S308 344 380 280V390H20Z" fill="#D6603F"/>' +
+          '<path d="M20 339C87 281 127 282 192 333S309 387 380 323V390H20Z" fill="#263D39"/>',
+      ),
     ),
   },
   {
     id: "orbit",
-    name: "In good orbit",
-    subtitle: "A cosmic coffee break",
+    name: "Bauhaus",
+    subtitle: "Balanced circles and color blocks",
     svg: svg(
-      `<circle cx="200" cy="200" r="118" fill="#D6603F"/><path d="M95 145a118 118 0 0 1 191-15H115m-28 33h220m-229 33h240m-235 33h234m-212 33h192m-152 33h109" stroke="#DFAB49" stroke-width="14"/><ellipse cx="200" cy="200" rx="183" ry="44" transform="rotate(-30 200 200)" fill="none" stroke="#263D39" stroke-width="16"/><path d="m72 62 5 15 16 5-16 5-5 15-5-15-16-5 16-5Zm254 210 6 18 18 6-18 6-6 18-6-18-18-6 18-6Z" fill="#DFAB49"/><circle cx="307" cy="64" r="11" fill="#263D39"/>`,
+      frame(
+        '<circle cx="200" cy="200" r="174" fill="#263D39"/>' +
+          '<path d="M26 26h174v174H26Z" fill="#D6603F"/>' +
+          '<path d="M200 200h174v174H200Z" fill="#DFAB49"/>' +
+          '<path d="M200 50a150 150 0 0 1 150 150H200Z" fill="#F2E9D8"/>' +
+          '<path d="M200 350A150 150 0 0 1 50 200h150Z" fill="#F2E9D8"/>' +
+          '<circle cx="200" cy="200" r="76" fill="#263D39"/>' +
+          '<circle cx="200" cy="200" r="49" fill="#D6603F"/>' +
+          '<circle cx="200" cy="200" r="22" fill="#F2E9D8"/>' +
+          '<circle cx="104" cy="103" r="23" fill="#DFAB49"/>' +
+          '<circle cx="296" cy="297" r="23" fill="#D6603F"/>',
+      ),
     ),
   },
 ];
 export const svgDataUrl = (value: string) =>
-  `data:image/svg+xml;charset=utf-8,${encodeURIComponent(value)}`;
+  "data:image/svg+xml;charset=utf-8," + encodeURIComponent(value);

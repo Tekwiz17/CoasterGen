@@ -58,7 +58,7 @@ export interface ModelData {
 export const DEFAULT_COLORS = ["#F2E9D8", "#DFAB49", "#D6603F", "#263D39"];
 export const DEFAULT_PROJECT: Project = {
   version: 1,
-  name: "Golden hour",
+  name: "Solstice",
   shape: "circle",
   diameter: 100,
   thickness: 4,
@@ -69,7 +69,7 @@ export const DEFAULT_PROJECT: Project = {
   matchBase: DEFAULT_COLORS[0],
   mapping: [0, 1, 2, 3],
   source: "",
-  sourceName: "Golden hour.svg",
+  sourceName: "Solstice.svg",
   sample: "sunset",
   artScale: 90,
   artX: 0,

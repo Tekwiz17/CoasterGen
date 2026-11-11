@@ -21,7 +21,9 @@ Vercel uses the Vite preset and `dist` output. No environment variables, databas
 
 - Round, soft-square, and hexagonal coasters, with dimensions in millimeters.
 - PNG, JPG, WebP, and self-contained SVG artwork. Images never upload.
-- A large top-view editor, optional 3D view, and a first-visit tutorial with skip and replay.
+- A large top-view editor and four sidebar steps: Size, Image, Magnets, and Print. The +/− image-size controls change artwork scale and the exported geometry; camera fit remains separate.
+- Four redesigned SVG examples: Solstice, Ginkgo, Tidal, and Bauhaus.
+- Optional 3D view and a first-visit tutorial with skip and replay.
 - An import dialog with original/coaster previews, 2–8 color limits, custom filament colors, and explicit image-to-filament mapping before applying.
 - Perceptual OKLab color quantization, edge-connected background removal, and vector contour tracing in a Web Worker. Smooth edges removes tiny color flecks, smooths a shared boundary graph, and simplifies shared chains once to keep neighboring color inlays aligned. Turn smoothing off for pixel art.
 - Palette/model request keys reject outdated results, including rapid color reductions. Exports wait for the current model.
@@ -42,11 +44,11 @@ The **Open in Bambu Studio** workflow downloads the local colored 3MF and invoke
 
 ## Accuracy
 
-Artwork is rasterized at 192, 320, 512 (default), or 768 pixels on its longest edge. The default smoothing uses four conservative boundary relaxation passes followed by 0.45-pixel shared-chain simplification. Color junctions remain fixed and adjoining regions reuse the same vertices. SVG inputs are also rasterized and color-reduced; their original Bézier geometry is not retained. A 100 mm image at 320 pixels has roughly 0.31 mm source resolution before scaling. Very small features may be below a printer nozzle's printable width. Total-volume PLA weight is an estimate at 1.24 g/cm³; actual slicer infill, purge, and supports change material usage. Magnet fit depends on your printer; test before gluing.
+Artwork is rasterized at 192, 320, 512 (default), or 768 pixels on its longest edge. The default smoothing resolves antialiased edge pixels against their actual neighboring colors, removes isolated specks, and relaxes shared boundaries. It fits local cubic Bézier curves while protecting sharp corners, resamples both sides from the same shared curve, and simplifies at 0.06-pixel tolerance. Color junctions remain fixed and adjoining regions reuse the same vertices. SVG inputs are also rasterized and color-reduced; their original Bézier geometry is not retained. A 100 mm image at 320 pixels has roughly 0.31 mm source resolution before scaling. Very small features may be below a printer nozzle's printable width. Total-volume PLA weight is an estimate at 1.24 g/cm³; actual slicer infill, purge, and supports change material usage. Magnet fit depends on your printer; test before gluing.
 
 ## Stack
 
-React, TypeScript, Vite, Three.js, Manifold WASM, fflate, Lucide, and self-hosted DM Sans. Source code is in `src/`; the compute worker is `src/engine.worker.ts`.
+React, TypeScript, Vite, Three.js, Manifold WASM, fit-curve, fflate, Lucide, and self-hosted DM Sans. Source code is in `src/`; the compute worker is `src/engine.worker.ts`.
 
 Keyboard shortcuts: ⌘/Ctrl+Z undo; ⌘/Ctrl+Shift+Z redo; ⌘/Ctrl+S save a project copy; F fit the preview.
 

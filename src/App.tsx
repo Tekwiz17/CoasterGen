@@ -54,7 +54,7 @@ import ImportDialog from "./components/ImportDialog";
 import Modal from "./components/Modal";
 import Tutorial from "./components/Tutorial";
 const ModelViewer = lazy(() => import("./components/ModelViewer"));
-type Tab = "coaster" | "artwork" | "magnets";
+type Tab = "coaster" | "artwork" | "magnets" | "print";
 type Dialog = "tutorial" | "export" | "bambu" | "reset" | null;
 const alignmentButtons = [
   { id: "left", label: "Align left", Icon: AlignHorizontalJustifyStart },
@@ -515,17 +515,32 @@ export default function App() {
                           ? "Drag to rotate · scroll to zoom"
                           : "Drag image to move · snaps to center"}
                     </span>
-                    <div className="zoom-tools">
+                    <div
+                      className="zoom-tools"
+                      role="group"
+                      aria-label="Resize image"
+                    >
+                      <small>Image size</small>
                       <button
                         aria-label="Zoom out"
-                        onClick={() => setZoom((v) => Math.max(0.55, v - 0.15))}
+                        title="Make image smaller"
+                        disabled={bottom || p.artScale <= 5 || !art}
+                        onClick={() =>
+                          change({ artScale: Math.max(5, p.artScale - 5) })
+                        }
                       >
                         <Minus size={15} />
                       </button>
-                      <span>{Math.round(zoom * 100)}%</span>
+                      <span className="image-scale" aria-label="Image scale">
+                        {Math.round(p.artScale)}%
+                      </span>
                       <button
                         aria-label="Zoom in"
-                        onClick={() => setZoom((v) => Math.min(1.9, v + 0.15))}
+                        title="Make image larger"
+                        disabled={bottom || p.artScale >= 180 || !art}
+                        onClick={() =>
+                          change({ artScale: Math.min(180, p.artScale + 5) })
+                        }
                       >
                         <Plus size={15} />
                       </button>
@@ -577,53 +592,6 @@ export default function App() {
                   </div>
                 </div>
               )}
-              <div className="download-panel panel">
-                <div className="download-heading">
-                  <span className="step-label">4</span>
-                  <div>
-                    <h2>Ready to print?</h2>
-                    <p>
-                      {p.diameter} × {p.thickness} mm <span>·</span>{" "}
-                      {usedColors} colors <span>·</span>{" "}
-                      {magnetCenters(p).length} magnet pockets
-                    </p>
-                  </div>
-                  <button
-                    className="icon-button"
-                    aria-label="More export formats"
-                    title="SVG, STL and project files"
-                    onClick={() => setDialog("export")}
-                  >
-                    <ChevronDown size={19} />
-                  </button>
-                </div>
-                <div className="download-actions">
-                  <button
-                    className="button primary"
-                    disabled={!canExport || exporting}
-                    onClick={() => exportFile("3mf")}
-                  >
-                    <Download size={18} />
-                    {exporting ? "Preparing…" : "Download 3MF"}
-                  </button>
-                  <button
-                    className="button light bambu"
-                    disabled={!canExport || exporting}
-                    onClick={() => {
-                      setBambuReady(false);
-                      setDialog("bambu");
-                    }}
-                  >
-                    <BambuLogo />
-                    Bambu Studio
-                    <ArrowUpRight size={14} />
-                  </button>
-                </div>
-                <p className="control-note">
-                  3MF includes your colors and magnet pockets. Select your
-                  printer and filament slots in your slicer.
-                </p>
-              </div>
               <div className="sample-section">
                 <div className="sample-heading">
                   <h2>Try an example</h2>
@@ -658,9 +626,20 @@ export default function App() {
                 aria-label="Coaster settings"
               >
                 {[
-                  { id: "coaster", label: "Size", n: 1 },
-                  { id: "artwork", label: "Image & colors", n: 2 },
-                  { id: "magnets", label: "Magnets", n: 3 },
+                  { id: "coaster", label: "Size", short: "Size", n: 1 },
+                  {
+                    id: "artwork",
+                    label: "Image & colors",
+                    short: "Image",
+                    n: 2,
+                  },
+                  { id: "magnets", label: "Magnets", short: "Magnets", n: 3 },
+                  {
+                    id: "print",
+                    label: "Ready to print",
+                    short: "Print",
+                    n: 4,
+                  },
                 ].map((item) => (
                   <button
                     key={item.id}
@@ -671,7 +650,12 @@ export default function App() {
                     aria-selected={tab === item.id}
                     tabIndex={tab === item.id ? 0 : -1}
                     onKeyDown={(e) => {
-                      const ids: Tab[] = ["coaster", "artwork", "magnets"];
+                      const ids: Tab[] = [
+                        "coaster",
+                        "artwork",
+                        "magnets",
+                        "print",
+                      ];
                       if (
                         ["ArrowLeft", "ArrowRight", "Home", "End"].includes(
                           e.key,
@@ -682,10 +666,12 @@ export default function App() {
                           e.key === "Home"
                             ? 0
                             : e.key === "End"
-                              ? 2
+                              ? ids.length - 1
                               : (ids.indexOf(tab) +
-                                  (e.key === "ArrowRight" ? 1 : 2)) %
-                                3;
+                                  (e.key === "ArrowRight"
+                                    ? 1
+                                    : ids.length - 1)) %
+                                ids.length;
                         setTab(ids[index]);
                         document.getElementById("tab-" + ids[index])?.focus();
                       }
@@ -693,7 +679,7 @@ export default function App() {
                     onClick={() => setTab(item.id as Tab)}
                   >
                     <span>{item.n}</span>
-                    {item.label}
+                    {item.short}
                   </button>
                 ))}
               </div>
@@ -1119,15 +1105,62 @@ export default function App() {
                       onClick={() => {
                         setBottom(false);
                         setView("3d");
-                        notify(
-                          "Inspect the 3D preview, then download your 3MF.",
-                        );
+                        setTab("print");
+                        notify("Inspect your coaster and download its 3MF.");
                       }}
                     >
-                      Review coaster
+                      Next: ready to print
                       <Box size={16} />
                     </button>
                   </Section>
+                )}
+                {tab === "print" && (
+                  <div className="download-panel">
+                    <div className="download-heading">
+                      <div>
+                        <h2>Ready to print?</h2>
+                        <p>
+                          {p.diameter} × {p.thickness} mm <span>·</span>{" "}
+                          {usedColors} colors <span>·</span>{" "}
+                          {magnetCenters(p).length} magnet pockets
+                        </p>
+                      </div>
+                      <button
+                        className="icon-button"
+                        aria-label="More export formats"
+                        title="SVG, STL and project files"
+                        onClick={() => setDialog("export")}
+                      >
+                        <ChevronDown size={19} />
+                      </button>
+                    </div>
+                    <div className="download-actions">
+                      <button
+                        className="button primary"
+                        disabled={!canExport || exporting}
+                        onClick={() => exportFile("3mf")}
+                      >
+                        <Download size={18} />
+                        {exporting ? "Preparing…" : "Download 3MF"}
+                      </button>
+                      <button
+                        className="button light bambu"
+                        disabled={!canExport || exporting}
+                        onClick={() => {
+                          setBambuReady(false);
+                          setDialog("bambu");
+                        }}
+                      >
+                        <BambuLogo />
+                        Bambu Studio
+                        <ArrowUpRight size={14} />
+                      </button>
+                    </div>
+                    <p className="control-note">
+                      3MF includes your colors and magnet pockets. Select your
+                      printer and filament slots in your slicer.
+                    </p>
+                  </div>
                 )}
                 <div className="settings-footer">
                   <span>Artwork stays on your device</span>

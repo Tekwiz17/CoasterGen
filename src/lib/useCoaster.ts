@@ -103,8 +103,19 @@ export function useCoaster() {
   }
   function change(patch: Partial<Project>, match = false) {
     checkpoint();
-    if (match) autoMatch.current = true;
-    replace({ ...current.current, ...patch });
+    let next = { ...current.current, ...patch };
+    if (match) {
+      autoMatch.current = true;
+      if (traced?.key === artworkKey(next)) {
+        next = {
+          ...next,
+          colors: [next.colors[0], ...traced.art.sourceColors.slice(1)],
+          mapping: traced.art.sourceColors.map((_, i) => i),
+        };
+        autoMatch.current = false;
+      }
+    }
+    replace(next);
   }
   function move(x: number, y: number) {
     replace({ ...current.current, artX: x, artY: y });
@@ -158,7 +169,11 @@ export function useCoaster() {
     loadLocal().then((stored) => {
       if (!active) return;
       if (stored) {
-        autoMatch.current = false;
+        autoMatch.current =
+          !stored.source &&
+          JSON.stringify(stored.colors) ===
+            JSON.stringify(DEFAULT_PROJECT.colors) &&
+          stored.mapping.every((slot, i) => slot === i);
         replace(stored);
       }
       setReady(true);
@@ -168,7 +183,7 @@ export function useCoaster() {
     };
   }, []);
   useEffect(() => {
-    if (!ready) return;
+    if (!ready || !art || autoMatch.current) return;
     let active = true;
     setSaved("Saving…");
     const timer = setTimeout(
@@ -186,7 +201,7 @@ export function useCoaster() {
       active = false;
       clearTimeout(timer);
     };
-  }, [p, ready]);
+  }, [p, ready, art]);
   useEffect(() => {
     if (!ready) return;
     if (traced?.key === key) {

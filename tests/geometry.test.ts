@@ -400,3 +400,60 @@ test("legacy saved projects gain smooth edges and impossible outer magnet gaps a
     vectorize(new Uint8ClampedArray(4), 1, 1, 0, "#FFFFFF", false),
   );
 });
+
+test("antialiased cream/black curves do not grow unrelated blue or red fringe regions", () => {
+  const n = 128,
+    data = new Uint8ClampedArray(n * n * 4);
+  const base = [242, 233, 216],
+    ink = [10, 12, 12];
+  for (let y = 0; y < n; y++)
+    for (let x = 0; x < n; x++) {
+      let color: number[];
+      if (x < 25 && y < 25) color = [210, 35, 40];
+      else if (x > 102 && y < 25) color = [25, 105, 205];
+      else {
+        const coverage = Math.max(
+          0,
+          Math.min(1, 30.4 - Math.hypot(x - 63.5, y - 75.5)),
+        );
+        color = base.map((v, i) => v * (1 - coverage) + ink[i] * coverage);
+      }
+      data.set([...color, 255], (y * n + x) * 4);
+    }
+  const art = vectorize(data, n, n, 4, "#F2E9D8", false, true);
+  for (const [i, color] of art.sourceColors.entries()) {
+    const r = parseInt(color.slice(1, 3), 16),
+      b = parseInt(color.slice(5, 7), 16);
+    if ((r > 170 && b < 80) || (b > 120 && r < 80)) {
+      assert.equal(
+        art.loops[i].length,
+        1,
+        "Only the intended solid color block remains",
+      );
+      assert.ok(
+        art.loops[i].flat().every(([, y]) => y < 26),
+        "No colored shards around the monochrome circle",
+      );
+    }
+  }
+  buildModel(api, project({ colors: art.sourceColors }), art).parts.forEach(
+    watertight,
+  );
+});
+
+test("pixel-art mode retains isolated pixel details and exact square corners", () => {
+  const n = 32,
+    data = new Uint8ClampedArray(n * n * 4).fill(255);
+  for (let y = 3; y < 14; y++)
+    for (let x = 3; x < 14; x++) data.set([0, 0, 0, 255], (y * n + x) * 4);
+  data.set([0, 0, 0, 255], (27 * n + 27) * 4);
+  const pixel = vectorize(data, n, n, 2, "#FFFFFF", false, false);
+  assert.equal(pixel.loops[1].length, 2);
+  assert.ok(pixel.loops[1].flat().every((p) => p.every(Number.isInteger)));
+  const smooth = vectorize(data, n, n, 2, "#FFFFFF", false, true);
+  assert.equal(
+    smooth.loops[1].length,
+    1,
+    "Smoothing removes the isolated one-pixel fleck",
+  );
+});

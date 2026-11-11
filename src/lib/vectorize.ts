@@ -1,4 +1,5 @@
 import type { Artwork, Vec2 } from "../types";
+import { refineBoundary, simplifyIndices } from "./curves";
 type RGB = [number, number, number];
 const rgb = (hex: string): RGB =>
   hex
@@ -159,27 +160,104 @@ export function vectorize(
           ((data[i * 4 + 1] >> 3) << 5) |
           (data[i * 4 + 2] >> 3),
       )!;
-  // Remove isolated one-pixel noise without blurring intentional connected lines.
+  // Antialiased pixels between two colors can be nearest to an unrelated
+  // palette color (e.g. red between cream and black). Resolve that blend
+  // against the two colors actually present on the local boundary.
   const filtered = labels.slice();
-  for (let y = 1; y < height - 1; y++)
-    for (let x = 1; x < width - 1; x++) {
-      const i = y * width + x,
-        c = labels[i];
-      if (c === 255) continue;
-      const ns = [
-        labels[i - 1],
-        labels[i + 1],
-        labels[i - width],
-        labels[i + width],
-      ];
-      if (!ns.includes(c)) {
-        const v = ns.find((n) => ns.filter((m) => m === n).length >= 3);
-        if (v !== undefined) filtered[i] = v;
+  if (smooth)
+    for (let y = 1; y < height - 1; y++)
+      for (let x = 1; x < width - 1; x++) {
+        const i = y * width + x,
+          current = labels[i];
+        if (current === 255) continue;
+        const neighbors = new Map<number, number>();
+        for (let dy = -1; dy <= 1; dy++)
+          for (let dx = -1; dx <= 1; dx++) {
+            if (!dx && !dy) continue;
+            const c = labels[i + dy * width + dx];
+            if (c !== 255) neighbors.set(c, (neighbors.get(c) ?? 0) + 1);
+          }
+        if ((neighbors.get(current) ?? 0) > 4) continue;
+        const others = [...neighbors]
+          .filter(([c]) => c !== current)
+          .sort((a, b) => b[1] - a[1]);
+        if (others.length < 2 || others[0][1] < 2 || others[1][1] < 2) continue;
+        const a = colors[others[0][0]],
+          b = colors[others[1][0]];
+        const pixel: RGB = [data[i * 4], data[i * 4 + 1], data[i * 4 + 2]];
+        const v = b.map((c, j) => c - a[j]),
+          length = v.reduce((sum, c) => sum + c * c, 0);
+        if (length < 100) continue;
+        const t = Math.max(
+          0,
+          Math.min(
+            1,
+            v.reduce((sum, c, j) => sum + (pixel[j] - a[j]) * c, 0) / length,
+          ),
+        );
+        const blend: RGB = a.map((c, j) => c + t * v[j]) as RGB;
+        const residual = dist(pixel, blend);
+        if (residual < 160 && residual * 4 < dist(pixel, colors[current]))
+          filtered[i] = others[t < 0.5 ? 0 : 1][0];
       }
+  // Remove one-pixel burrs while retaining continuous thin lines. Work from
+  // a snapshot each pass so color/scan ordering cannot affect the result.
+  if (smooth)
+    for (let pass = 0; pass < 2; pass++) {
+      const snapshot = filtered.slice();
+      for (let y = 1; y < height - 1; y++)
+        for (let x = 1; x < width - 1; x++) {
+          const i = y * width + x,
+            c = snapshot[i];
+          if (c === 255) continue;
+          const offsets = [
+            -width - 1,
+            -width,
+            -width + 1,
+            -1,
+            1,
+            width - 1,
+            width,
+            width + 1,
+          ];
+          const ns = offsets.map((offset) => snapshot[i + offset]);
+          const same = ns.filter((v) => v === c).length;
+          const continuous = [
+            [0, 7],
+            [1, 6],
+            [2, 5],
+            [3, 4],
+          ].some(([a, b]) => ns[a] === c && ns[b] === c);
+          if (same > 2 || continuous) continue;
+          const votes = new Map<number, number>();
+          for (const v of ns)
+            if (v !== c && v !== 255) votes.set(v, (votes.get(v) ?? 0) + 1);
+          const best = [...votes].sort((a, b) => b[1] - a[1])[0];
+          if (best?.[1] >= 5) filtered[i] = best[0];
+        }
     }
+  // Remove isolated one-pixel noise without blurring intentional connected lines.
+  if (smooth)
+    for (let y = 1; y < height - 1; y++)
+      for (let x = 1; x < width - 1; x++) {
+        const i = y * width + x,
+          c = labels[i];
+        if (c === 255) continue;
+        const ns = [
+          labels[i - 1],
+          labels[i + 1],
+          labels[i - width],
+          labels[i + width],
+        ];
+        if (!ns.includes(c)) {
+          const v = ns.find((n) => ns.filter((m) => m === n).length >= 3);
+          if (v !== undefined) filtered[i] = v;
+        }
+      }
   // Reassign tiny disconnected color flecks (often antialiasing/compression
   // artifacts). Work from a snapshot so scan direction cannot change results.
   if (smooth) {
+    const labels = filtered.slice();
     const seen = new Uint8Array(labels.length);
     for (let start = 0; start < labels.length; start++) {
       if (seen[start] || labels[start] === 255) continue;
@@ -209,7 +287,11 @@ export function vectorize(
           }
         }
       }
-      if (component.length <= 3 && neighbors.size) {
+      const speckArea = Math.max(
+        3,
+        Math.round(((width * height) / (512 * 512)) * 9),
+      );
+      if (component.length <= speckArea && neighbors.size) {
         const replacement = [...neighbors].sort((a, b) => b[1] - a[1])[0][0];
         for (const i of component) filtered[i] = replacement;
       }
@@ -277,37 +359,9 @@ function smoothBoundaries(labels: Uint8Array, w: number, h: number) {
   const visited = new Set<string>();
   const edgeKey = (a: number, b: number) => (a < b ? a + "," + b : b + "," + a);
   const simplify = (chain: number[]) => {
-    const stack: [number, number][] = [[0, chain.length - 1]];
-    keep.add(chain[0]);
-    keep.add(chain[chain.length - 1]);
-    while (stack.length) {
-      const [start, end] = stack.pop()!;
-      const a = points.get(chain[start])!,
-        b = points.get(chain[end])!;
-      const dx = b[0] - a[0],
-        dy = b[1] - a[1],
-        length = dx * dx + dy * dy;
-      let distance = 0.45 * 0.45,
-        far = -1;
-      for (let i = start + 1; i < end; i++) {
-        const p = points.get(chain[i])!;
-        const t = length
-          ? Math.max(
-              0,
-              Math.min(1, ((p[0] - a[0]) * dx + (p[1] - a[1]) * dy) / length),
-            )
-          : 0;
-        const d = (p[0] - a[0] - t * dx) ** 2 + (p[1] - a[1] - t * dy) ** 2;
-        if (d > distance) {
-          distance = d;
-          far = i;
-        }
-      }
-      if (far >= 0) {
-        keep.add(chain[far]);
-        stack.push([start, far], [far, end]);
-      }
-    }
+    const refined = refineBoundary(chain.map((key) => points.get(key)!));
+    for (let i = 0; i < chain.length; i++) points.set(chain[i], refined[i]);
+    for (const i of simplifyIndices(refined, 0.06)) keep.add(chain[i]);
   };
   const walk = (start: number, first: number) => {
     const chain = [start];

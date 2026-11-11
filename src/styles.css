@@ -1999,3 +1999,91 @@ input[type="range"]::-moz-range-thumb {
     animation-iteration-count: 1 !important;
   }
 }
+
+/* Four short steps keep printing in the same sidebar workflow. */
+.settings-tabs > button {
+  gap: 5px;
+  padding-left: 5px;
+  padding-right: 5px;
+}
+.settings-panel .download-panel {
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+}
+.settings-panel .download-heading {
+  align-items: flex-start;
+  margin-bottom: 22px;
+}
+.settings-panel .download-heading h2 {
+  font-size: 19px;
+  margin-bottom: 9px;
+}
+.settings-panel .download-heading p {
+  line-height: 1.9;
+}
+.settings-panel .download-actions {
+  flex-direction: column;
+  gap: 10px;
+}
+.settings-panel .download-actions > button {
+  width: 100%;
+}
+.print-step-link {
+  margin-top: 15px;
+}
+.zoom-tools {
+  flex-shrink: 0;
+}
+.zoom-tools small {
+  font-size: 9px;
+  color: var(--muted);
+  padding-left: 9px;
+  padding-right: 5px;
+}
+.zoom-tools > .image-scale {
+  width: 40px;
+  font-size: 10px;
+}
+.orbit-hint {
+  min-width: 0;
+}
+@media (max-width: 820px) {
+  .canvas-column .sample-section {
+    display: block;
+  }
+  .sample-heading > span {
+    display: none;
+  }
+  .sample-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .sample-card {
+    padding: 9px 12px;
+  }
+  .sample-card > span:nth-child(2) {
+    font-size: 11px;
+  }
+}
+@media (max-width: 500px) {
+  .settings-tabs > button {
+    font-size: 10px;
+    gap: 4px;
+    padding-left: 4px;
+    padding-right: 4px;
+  }
+  .zoom-tools small {
+    font-size: 8px;
+    padding-left: 7px;
+    padding-right: 2px;
+  }
+  .zoom-tools > .image-scale {
+    width: 32px;
+    font-size: 9px;
+  }
+  .orbit-hint {
+    font-size: 8px;
+    max-width: 120px;
+  }
+}

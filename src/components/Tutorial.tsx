@@ -27,14 +27,14 @@ const steps = [
   {
     title: "Position it. Add magnets if you like.",
     label: "Adjust",
-    text: "Drag your image in the top view. Use Center and the snap lines to line it up. Switch to 3D to inspect the result.",
+    text: "Drag your image in the top view. The + and − controls change the image size. Use Center and the snap lines to line it up.",
     detail:
       "Magnets are optional. Choose a center pocket or several outer pockets, then enter your magnet dimensions.",
   },
   {
     title: "Download and print",
     label: "Print",
-    text: "Download 3MF to keep the geometry and color assignments. Open the file in Bambu Studio or another compatible slicer.",
+    text: "Open step 4, Print, in the sidebar. Download 3MF to keep the geometry and color assignments, then open it in your slicer.",
     detail:
       "Choose your printer, match the filament slots to your spools and check the sliced preview before printing.",
   },
