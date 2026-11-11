@@ -216,10 +216,16 @@ export default function App() {
   }
   function chooseSample(id: string) {
     const sample = SAMPLES.find((s) => s.id === id)!;
+    const leavingBlank = !p.source && p.sample === "blank" && id !== "blank";
     change(
       {
         source: "",
         cleanupMask: "",
+        ...(id === "blank"
+          ? { colors: ["#FFFFFF", "#263D39"], colorCount: 2 }
+          : leavingBlank
+            ? { colors: [...DEFAULT_PROJECT.colors], colorCount: 4 }
+            : {}),
         sample: id,
         sourceName: sample.name + ".svg",
         name: sample.name,
@@ -229,7 +235,12 @@ export default function App() {
         rotation: 0,
         mirror: false,
         removeBackground: false,
-        matchBase: p.colors[0],
+        matchBase:
+          id === "blank"
+            ? "#FFFFFF"
+            : leavingBlank
+              ? DEFAULT_PROJECT.colors[0]
+              : p.colors[0],
       },
       true,
     );
@@ -613,7 +624,7 @@ export default function App() {
               )}
               <div className="sample-section">
                 <div className="sample-heading">
-                  <h2>Try an example</h2>
+                  <h2>Start with a template</h2>
                   <span>Or upload your own in Image & colors</span>
                 </div>
                 <div className="sample-grid">
@@ -626,7 +637,12 @@ export default function App() {
                       }
                       onClick={() => chooseSample(sample.id)}
                     >
-                      <span className="sample-preview">
+                      <span
+                        className={
+                          "sample-preview" +
+                          (sample.id === "blank" ? " blank-preview" : "")
+                        }
+                      >
                         <img src={svgDataUrl(sample.svg)} alt="" />
                       </span>
                       <span>{sample.name}</span>
@@ -871,7 +887,7 @@ export default function App() {
                           <option value={320}>Standard</option>
                           <option value={512}>High (recommended)</option>
                           <option value={768}>Fine</option>
-                          <option value={1024}>Extra fine (slower)</option>
+                          <option value={1024}>Extra high (slower)</option>
                         </select>
                       </label>
                     </details>
@@ -939,7 +955,19 @@ export default function App() {
                       />
                       <div className="label-row filament-heading">
                         <strong>Your filament colors</strong>
-                        <span>Click to change</span>
+                        <button
+                          className="text-button"
+                          disabled={!art || processing}
+                          title="Refresh filament colors from the image; keep brush corrections"
+                          onClick={() =>
+                            change(
+                              { sourcePalette: [], matchBase: p.colors[0] },
+                              true,
+                            )
+                          }
+                        >
+                          Match original colors
+                        </button>
                       </div>
                       <Filaments
                         colors={p.colors.slice(0, p.colorCount)}

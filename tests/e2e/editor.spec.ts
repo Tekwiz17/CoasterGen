@@ -1,6 +1,7 @@
 import { test, expect, type Page } from "@playwright/test";
 import { readFile } from "node:fs/promises";
 import { unzipSync, strFromU8 } from "fflate";
+import { DEFAULT_PROJECT } from "../../src/types";
 const image = {
   name: "test-art.svg",
   mimeType: "image/svg+xml",
@@ -495,6 +496,7 @@ test("eraser removes pixels, supports undo and reset, and preserves the palette 
     )
     .toBe(true);
   async function erase() {
+    await eraser.scrollIntoViewIfNeeded();
     const rect = await eraser.boundingBox();
     expect(rect).toBeTruthy();
     const x = rect!.x + rect!.width * 0.8,
@@ -796,5 +798,160 @@ test("live multicolor painting survives remapping, save/reload, restore, zoom an
   }, edited.cleanupMask);
   expect(restored).toBe(0);
   expect(errors).toEqual([]);
+  await fits(page);
+});
+
+test("matching original colors recovers a small accent while retaining cleanup and placement", async ({
+  page,
+}) => {
+  test.setTimeout(120000);
+  const errors: string[] = [];
+  page.on("pageerror", (e) => errors.push(e.message));
+  await open(page);
+  const cleanupMask = await page.evaluate(() => {
+    const c = document.createElement("canvas");
+    c.width = 128;
+    c.height = 64;
+    const ctx = c.getContext("2d")!;
+    ctx.fillStyle = "rgb(2,0,0)";
+    ctx.fillRect(20, 20, 5, 5);
+    return c.toDataURL("image/png");
+  });
+  const svg =
+    '<svg xmlns="http://www.w3.org/2000/svg" width="128" height="64"><path fill="#fff" d="M0 0h128v64H0z"/><path fill="#141e37" d="M0 0h64v64H0z"/><path fill="#e61e46" d="M40 30h1v1h-1z"/></svg>';
+  const p = {
+    ...DEFAULT_PROJECT,
+    name: "Small accents",
+    source: "data:image/svg+xml;charset=utf-8," + encodeURIComponent(svg),
+    sourceName: "small-accents.svg",
+    sample: "",
+    colorCount: 3,
+    colors: ["#FFFFFF", "#141E37", "#948292"],
+    sourcePalette: ["#FFFFFF", "#141E37", "#948292"],
+    matchBase: "#FFFFFF",
+    mapping: [0, 1, 2],
+    cleanupMask,
+    artScale: 88,
+    artX: 2,
+    artY: -3,
+  };
+  await page
+    .getByLabel("Open CoasterGen project", { exact: true })
+    .setInputFiles({
+      name: "small-accents.coaster.json",
+      mimeType: "application/json",
+      buffer: Buffer.from(JSON.stringify(p)),
+    });
+  await ready(page);
+  await page.getByRole("tab", { name: "Image & colors", exact: true }).click();
+  await expect(
+    page.getByLabel("Filament 3 color", { exact: true }),
+  ).toHaveValue("#948292");
+  await page
+    .getByRole("button", { name: "Match original colors", exact: true })
+    .click();
+  await ready(page);
+  await expect(
+    page.getByLabel("Filament 3 color", { exact: true }),
+  ).toHaveValue("#e61e46");
+  await page.getByRole("button", { name: "Edit / erase", exact: true }).click();
+  const modal = page.getByRole("dialog"),
+    apply = modal.getByRole("button", { name: "Use this image", exact: true });
+  await expect(apply).toBeEnabled({ timeout: 30000 });
+  await modal.getByLabel("Filament 3 color", { exact: true }).fill("#1122ff");
+  await modal
+    .getByRole("button", { name: "Match original colors", exact: true })
+    .click();
+  await expect(apply).toBeEnabled({ timeout: 30000 });
+  await expect(
+    modal.getByLabel("Filament 3 color", { exact: true }),
+  ).toHaveValue("#e61e46");
+  await apply.click();
+  await ready(page);
+  const download = page.waitForEvent("download");
+  await page.getByRole("button", { name: "Save project", exact: true }).click();
+  const saved = JSON.parse(
+    await readFile((await (await download).path())!, "utf8"),
+  );
+  expect(saved.cleanupMask).toBe(cleanupMask);
+  expect(saved.source).toBe(p.source);
+  expect(saved.name).toBe(p.name);
+  expect([saved.artScale, saved.artX, saved.artY]).toEqual([88, 2, -3]);
+  expect(saved.sourcePalette).toContain("#E61E46");
+  await printStep(page);
+  const model = page.waitForEvent("download");
+  await page.getByRole("button", { name: "Download 3MF", exact: true }).click();
+  const files = unzipSync(await readFile((await (await model).path())!));
+  expect(
+    JSON.parse(strFromU8(files["Metadata/project_settings.config"]))
+      .filament_colour,
+  ).toContain("#E61E46");
+  expect(errors).toEqual([]);
+  await fits(page);
+});
+
+test("blank white template exports and Quality applies its four settings", async ({
+  page,
+}) => {
+  test.setTimeout(120000);
+  await open(page);
+  await page.getByRole("button", { name: "Blank", exact: true }).click();
+  await ready(page);
+  await page.getByRole("tab", { name: "Image & colors", exact: true }).click();
+  await expect(
+    page.getByLabel("Filament 1 color", { exact: true }),
+  ).toHaveValue("#ffffff");
+  await printStep(page);
+  const download = page.waitForEvent("download");
+  await page.getByRole("button", { name: "Download 3MF", exact: true }).click();
+  const files = unzipSync(await readFile((await (await download).path())!));
+  const xml = strFromU8(files["3D/3dmodel.model"]);
+  expect(xml).toContain("<mesh>");
+  expect(xml).not.toContain('pindex="1"');
+  await page.getByRole("button", { name: "Solstice", exact: true }).click();
+  await ready(page);
+  await page.getByRole("tab", { name: "Image & colors", exact: true }).click();
+  await expect(
+    page.getByRole("button", { name: "4 total colors", exact: true }),
+  ).toHaveAttribute("aria-pressed", "true");
+  await expect(
+    page.getByLabel("Filament 1 color", { exact: true }),
+  ).toHaveValue("#f2e9d8");
+  await page
+    .getByLabel("Import artwork file", { exact: true })
+    .setInputFiles(image);
+  const modal = page.getByRole("dialog");
+  await modal.getByRole("button", { name: "Quality", exact: true }).click();
+  await expect(
+    modal.getByRole("button", { name: "Quality", exact: true }),
+  ).toHaveAttribute("aria-pressed", "true");
+  await expect(
+    modal.getByLabel("Import image detail", { exact: true }),
+  ).toHaveValue("1024");
+  await expect(
+    modal.getByRole("checkbox", { name: /^Keep fine details/ }),
+  ).not.toBeChecked();
+  await expect(
+    modal.getByRole("checkbox", { name: /^Remove background/ }),
+  ).toBeChecked();
+  await expect(
+    modal.getByRole("checkbox", { name: /^Smooth edges/ }),
+  ).toBeChecked();
+  const apply = modal.getByRole("button", {
+    name: "Use this image",
+    exact: true,
+  });
+  await expect(apply).toBeEnabled({ timeout: 60000 });
+  await apply.click();
+  await ready(page);
+  await page.getByRole("tab", { name: "Image & colors", exact: true }).click();
+  await page.getByRole("button", { name: "Edit / erase", exact: true }).click();
+  await expect(
+    modal.getByRole("button", { name: "Quality", exact: true }),
+  ).toHaveAttribute("aria-pressed", "true");
+  await modal.getByRole("checkbox", { name: /^Keep fine details/ }).check();
+  await expect(
+    modal.getByRole("button", { name: "Quality", exact: true }),
+  ).toHaveAttribute("aria-pressed", "false");
   await fits(page);
 });

@@ -42,6 +42,10 @@ Image cleanup: choose **Edit / erase** in Image & colors (including on examples)
 
 New imports use 768 px detail by default, with up to 1024 px available. **Keep fine details** retains small accent regions and thin strokes that noise cleanup would otherwise remove, and protects their shared boundaries from collapsing during smoothing. Turn it off when specks in a noisy image matter more than tiny details. Paint is applied after automatic cleanup so small manual corrections are retained. Filament choices and project names survive reopening and detail changes.
 
+Color matching uses a perceptual Oklab palette fitted to real source samples. Edge mixtures are downweighted before palette selection so an antialias fringe does not displace a small accent. Fine-detail mode retains exact illustration colors, limits the influence of very large background regions during palette selection, and protects the area of small islands and holes, narrow channels, and straight corners while smoothing shared boundaries. Solid fills stay anchored to well supported RGB colors. Use **Match original colors** in Image & colors or the import dialog to refresh an older project's palette; this updates filament colors while keeping brush corrections, size, and placement.
+
+Background removal samples the full image border rather than trusting the first corner. Transparent corners are supported, and the tighter flood threshold preserves pale details beside a plain background.
+
 Dimensions accept bare numbers or `mm` as millimeters. A suffix such as `4in`, `4 inches`, or `4"` converts on Enter or leaving the field (4 inches = 101.6 mm). All model and export dimensions remain in mm.
 
 ## Bambu Studio
@@ -65,3 +69,5 @@ Keyboard shortcuts: ⌘/Ctrl+Z undo; ⌘/Ctrl+Shift+Z redo; ⌘/Ctrl+S save a pr
 The Bambu Studio icon in `public/bambu-studio.svg` is the official application icon from [bambulab/BambuStudio](https://github.com/bambulab/BambuStudio/blob/master/resources/images/BambuStudio.svg). Bambu Studio and GitHub marks identify the linked products; CoasterGen is an independent project.
 
 For browser tests, install Chromium with `npx playwright install --with-deps chromium`. An existing Chromium executable can be selected with `PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH`. The regression suite runs desktop and mobile flows for tutorial persistence, repeated/rapid palette reduction in 3D, import previews and color mapping, colored exports, magnet validation, project recovery, and invalid files.
+
+Image import includes a **Quality** preset: extra-high 1024 px detail, background removal and edge smoothing on, and fine-detail protection off. Its settings remain individually adjustable. The **Blank** template starts with a plain white coaster and exports only its base.

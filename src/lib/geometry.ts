@@ -234,7 +234,7 @@ export function buildModel(
       volume: parts.reduce((a, b) => a + b.volume, 0),
       triangles: parts.reduce((a, b) => a + b.indices.length / 3, 0),
       warnings:
-        art.pixels === 0
+        art.pixels === 0 && (p.source || p.sample !== "blank")
           ? [
               "The artwork is fully transparent. Only the base will be exported.",
             ]

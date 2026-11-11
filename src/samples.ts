@@ -69,6 +69,12 @@ export const SAMPLES = [
       ),
     ),
   },
+  {
+    id: "blank",
+    name: "Blank",
+    subtitle: "A clean white coaster",
+    svg: svg(""),
+  },
 ];
 export const svgDataUrl = (value: string) =>
   "data:image/svg+xml;charset=utf-8," + encodeURIComponent(value);

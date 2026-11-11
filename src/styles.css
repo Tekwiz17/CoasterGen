@@ -2360,3 +2360,57 @@ fieldset.import-settings {
     border-top: 1px solid var(--line);
   }
 }
+.image-rematch {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 14px;
+  flex-wrap: wrap;
+}
+.image-rematch small {
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.5;
+  flex: 1;
+  min-width: 170px;
+}
+.filament-heading .text-button {
+  font-size: 11px;
+}
+
+/* Compact, readable starting points for image imports. */
+.import-preset {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  justify-content: space-between;
+  padding: 15px 17px;
+  margin: 0 0 18px;
+  border: 1px solid #cddfd2;
+  border-radius: 12px;
+  background: #f3f8f4;
+}
+.import-preset strong {
+  font-size: 14px;
+  color: #244c36;
+}
+.import-preset p {
+  margin: 5px 0 0;
+  max-width: 450px;
+  font-size: 12px;
+  line-height: 1.5;
+  color: #617467;
+}
+.import-preset button {
+  flex-shrink: 0;
+}
+.blank-preview {
+  background: #fff;
+  border: 1px solid #dce3dd;
+  box-shadow: inset 0 -3px 0 #f1f3f1;
+}
+@media (min-width: 1151px) {
+  .sample-grid {
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+  }
+}

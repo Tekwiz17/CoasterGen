@@ -1,37 +1,8 @@
 import type { Artwork, Vec2 } from "../types";
 import { refineBoundary, simplifyIndices } from "./curves";
-type RGB = [number, number, number];
-const rgb = (hex: string): RGB =>
-  hex
-    .slice(1)
-    .match(/../g)!
-    .map((x) => parseInt(x, 16)) as RGB;
-const hex = (c: RGB) =>
-  "#" +
-  c
-    .map((x) =>
-      Math.max(0, Math.min(255, Math.round(x)))
-        .toString(16)
-        .padStart(2, "0"),
-    )
-    .join("")
-    .toUpperCase();
-function lab(c: RGB): RGB {
-  const [r, g, b] = c.map((x) => {
-    x /= 255;
-    return x <= 0.04045 ? x / 12.92 : ((x + 0.055) / 1.055) ** 2.4;
-  });
-  const l = Math.cbrt(0.4122214708 * r + 0.5363325363 * g + 0.0514459929 * b);
-  const m = Math.cbrt(0.2119034982 * r + 0.6806995451 * g + 0.1073969566 * b);
-  const s = Math.cbrt(0.0883024619 * r + 0.2817188376 * g + 0.6299787005 * b);
-  return [
-    0.2104542553 * l + 0.793617785 * m - 0.0040720468 * s,
-    1.9779984951 * l - 2.428592205 * m + 0.4505937099 * s,
-    0.0259040371 * l + 0.7827717662 * m - 0.808675766 * s,
-  ];
-}
-const dist = (a: RGB, b: RGB) =>
-  (a[0] - b[0]) ** 2 + (a[1] - b[1]) ** 2 + (a[2] - b[2]) ** 2;
+import { distance as dist, hex, type RGB } from "./color";
+import { removeEdgeBackground } from "./background";
+import { quantize, resolveEdgeBlends } from "./palette";
 export function vectorize(
   data: Uint8ClampedArray,
   width: number,
@@ -50,230 +21,107 @@ export function vectorize(
   const preserve = options.preserveDetails ?? false;
   if (options.overrides && options.overrides.length !== width * height)
     throw new Error("The cleanup layer has invalid dimensions.");
-  const shift = preserve ? 2 : 3,
-    channelBits = 8 - shift;
-  const colorKey = (r: number, g: number, b: number) =>
-    ((r >> shift) << (channelBits * 2)) |
-    ((g >> shift) << channelBits) |
-    (b >> shift);
   const transparent = new Uint8Array(width * height);
-  let removed = 0;
   for (let i = 0; i < transparent.length; i++)
     if (data[i * 4 + 3] < 128) transparent[i] = 1;
-  if (removeBackground) {
-    const corners = [
-      0,
-      width - 1,
-      width * (height - 1),
-      width * height - 1,
-    ].filter((i) => !transparent[i]);
-    if (corners.length) {
-      const bg = lab([
-        data[corners[0] * 4],
-        data[corners[0] * 4 + 1],
-        data[corners[0] * 4 + 2],
-      ]);
-      const visited = new Uint8Array(transparent.length),
-        queue: number[] = [];
-      const add = (i: number) => {
-        if (visited[i]) return;
-        visited[i] = 1;
-        const color = lab([data[i * 4], data[i * 4 + 1], data[i * 4 + 2]]);
-        if (transparent[i] || dist(color, bg) < 0.014) {
-          transparent[i] = 1;
-          queue.push(i);
-          removed++;
-        }
-      };
-      for (let x = 0; x < width; x++) {
-        add(x);
-        add((height - 1) * width + x);
-      }
-      for (let y = 0; y < height; y++) {
-        add(y * width);
-        add(y * width + width - 1);
-      }
-      for (let q = 0; q < queue.length; q++) {
-        const i = queue[q],
-          x = i % width,
-          y = Math.floor(i / width);
-        if (x) add(i - 1);
-        if (x < width - 1) add(i + 1);
-        if (y) add(i - width);
-        if (y < height - 1) add(i + width);
-      }
-    }
-  }
-  const hist = new Map<
-    number,
-    { color: RGB; lab: RGB; n: number; core: number; sum: RGB; coreSum: RGB }
-  >();
-  for (let i = 0; i < transparent.length; i++)
-    if (!transparent[i]) {
-      const r = data[i * 4],
-        g = data[i * 4 + 1],
-        b = data[i * 4 + 2];
-      const key = colorKey(r, g, b);
-      let e = hist.get(key);
-      if (!e) {
-        const color: RGB = [r, g, b];
-        e = {
-          color,
-          lab: lab(color),
-          n: 0,
-          core: 0,
-          sum: [0, 0, 0],
-          coreSum: [0, 0, 0],
-        };
-        hist.set(key, e);
-      }
-      e.n++;
-      for (let c = 0; c < 3; c++) e.sum[c] += data[i * 4 + c];
-      // Flat interior pixels are reliable palette samples. Edge blends still
-      // contribute to matching, but cannot muddy a solid logo's filament color.
-      const x = i % width,
-        y = Math.floor(i / width);
-      if (
-        x > 0 &&
-        x < width - 1 &&
-        y > 0 &&
-        y < height - 1 &&
-        [-1, 1, -width, width].every(
-          (d) =>
-            !transparent[i + d] &&
-            [0, 1, 2].every(
-              (c) => Math.abs(data[(i + d) * 4 + c] - data[i * 4 + c]) <= 6,
-            ),
-        )
-      ) {
-        e.core++;
-        for (let c = 0; c < 3; c++) e.coreSum[c] += data[i * 4 + c];
-      }
-    }
-  for (const e of hist.values()) {
-    e.color = e.sum.map((v) => v / e.n) as RGB;
-    e.lab = lab(e.color);
-  }
-  const points = Array.from(hist.values());
-  if (
-    palette &&
-    (palette.length !== count ||
-      !palette.every((c) => /^#[0-9a-f]{6}$/i.test(c)))
-  )
-    throw new Error("The image palette is invalid.");
-  const colors: RGB[] = palette ? palette.map(rgb) : [rgb(base)],
-    centers: RGB[] = colors.map(lab);
-  while (centers.length < count) {
-    let best = points[0],
-      score = -1;
-    for (const p of points) {
-      const d =
-        Math.min(...centers.map((c) => dist(c, p.lab))) * Math.sqrt(p.n);
-      if (d > score) {
-        best = p;
-        score = d;
-      }
-    }
-    const color = best?.color ?? [128, 128, 128];
-    colors.push(color);
-    centers.push(lab(color));
-  }
-  const nearest = (p: RGB) => {
-    let best = 0,
-      d = Infinity;
-    centers.forEach((c, i) => {
-      const n = dist(c, p);
-      if (n < d) {
-        d = n;
-        best = i;
-      }
-    });
-    return best;
-  };
-  for (let it = 0; !palette && it < 14; it++) {
-    const sums = Array.from({ length: count }, () => [0, 0, 0, 0]);
-    for (const p of points) {
-      const j = nearest(p.lab);
-      const weight = preserve ? Math.sqrt(p.n) : p.n;
-      for (let c = 0; c < 3; c++) sums[j][c] += p.color[c] * weight;
-      sums[j][3] += weight;
-    }
-    for (let j = 1; j < count; j++)
-      if (sums[j][3]) {
-        colors[j] = sums[j].slice(0, 3).map((x) => x / sums[j][3]) as RGB;
-        centers[j] = lab(colors[j]);
-      }
-  }
-  if (!palette && smooth) {
-    const coreSums = Array.from({ length: count }, () => [0, 0, 0, 0, 0]);
-    for (const p of points) {
-      const sum = coreSums[nearest(p.lab)];
-      for (let c = 0; c < 3; c++) sum[c] += p.coreSum[c];
-      sum[3] += p.core;
-      sum[4] += p.n;
-    }
-    for (let j = 1; j < count; j++)
-      if (coreSums[j][3] >= Math.max(4, coreSums[j][4] * 0.15)) {
-        colors[j] = coreSums[j]
-          .slice(0, 3)
-          .map((v) => v / coreSums[j][3]) as RGB;
-        centers[j] = lab(colors[j]);
-      }
-  }
-  // Match against the exact palette written into project files, so reloading
-  // or editing the image cannot shift a boundary through RGB rounding.
-  for (let j = 0; j < colors.length; j++) {
-    colors[j] = rgb(hex(colors[j]));
-    centers[j] = lab(colors[j]);
-  }
-  const lookup = new Map<number, number>();
-  for (const [key, p] of hist) lookup.set(key, nearest(p.lab));
-  const labels = new Uint8Array(width * height).fill(255);
-  for (let i = 0; i < labels.length; i++)
-    if (!transparent[i])
-      labels[i] = lookup.get(
-        colorKey(data[i * 4], data[i * 4 + 1], data[i * 4 + 2]),
-      )!;
+  const removed = removeBackground
+    ? removeEdgeBackground(data, width, height, transparent)
+    : 0;
+  const { labels, colors, blends } = quantize(
+    data,
+    width,
+    height,
+    count,
+    base,
+    transparent,
+    preserve,
+    smooth,
+    palette,
+  );
   // Antialiased pixels between two colors can be nearest to an unrelated
   // palette color (e.g. red between cream and black). Resolve that blend
   // against the two colors actually present on the local boundary.
-  const filtered = labels.slice();
-  if (smooth)
-    for (let y = 1; y < height - 1; y++)
-      for (let x = 1; x < width - 1; x++) {
+  const filtered = blends
+    ? resolveEdgeBlends(labels, width, blends, data, colors)
+    : labels.slice();
+  if (smooth && count > 2)
+    for (let y = 0; y < height; y++)
+      for (let x = 0; x < width; x++) {
         const i = y * width + x,
           current = labels[i];
         if (current === 255) continue;
-        const neighbors = new Map<number, number>();
-        for (let dy = -1; dy <= 1; dy++)
-          for (let dx = -1; dx <= 1; dx++) {
-            if (!dx && !dy) continue;
-            const c = labels[i + dy * width + dx];
-            if (c !== 255) neighbors.set(c, (neighbors.get(c) ?? 0) + 1);
-          }
-        if ((neighbors.get(current) ?? 0) > 4) continue;
-        const others = [...neighbors]
-          .filter(([c]) => c !== current)
-          .sort((a, b) => b[1] - a[1]);
-        if (others.length < 2 || others[0][1] < 2 || others[1][1] < 2) continue;
-        const a = colors[others[0][0]],
-          b = colors[others[1][0]];
-        const pixel: RGB = [data[i * 4], data[i * 4 + 1], data[i * 4 + 2]];
-        if (preserve && dist(pixel, colors[current]) < 100) continue;
-        const v = b.map((c, j) => c - a[j]),
+        const pixel: RGB = [data[i * 4], data[i * 4 + 1], data[i * 4 + 2]],
+          error = dist(pixel, colors[current]);
+        // Confident source matches, including one-pixel accents, need no voting.
+        if (error < 100) continue;
+        const votes = new Uint8Array(count);
+        let total = 0;
+        const gather = (radius: number) => {
+          for (let dy = -radius; dy <= radius; dy++)
+            for (let dx = -radius; dx <= radius; dx++) {
+              if (Math.max(Math.abs(dx), Math.abs(dy)) !== radius) continue;
+              const xx = x + dx,
+                yy = y + dy;
+              if (xx < 0 || yy < 0 || xx >= width || yy >= height) continue;
+              const at = yy * width + xx,
+                c = labels[at];
+              if (c === 255) continue;
+              // A whole fringe of weakly matched pixels must not vote itself into
+              // an unrelated color. Use source neighbors that support their slot.
+              const color = colors[c];
+              if (
+                (data[at * 4] - color[0]) ** 2 +
+                  (data[at * 4 + 1] - color[1]) ** 2 +
+                  (data[at * 4 + 2] - color[2]) ** 2 >
+                900
+              )
+                continue;
+              votes[c]++;
+              total++;
+            }
+        };
+        const bestPair = () => {
+          let first = -1,
+            second = -1;
+          for (let c = 0; c < count; c++)
+            if (c !== current && votes[c]) {
+              if (first < 0 || votes[c] > votes[first]) {
+                second = first;
+                first = c;
+              } else if (second < 0 || votes[c] > votes[second]) second = c;
+            }
+          return [first, second];
+        };
+        gather(1);
+        let [first, second] = bestPair();
+        if (first < 0 || second < 0 || votes[first] < 2 || votes[second] < 2) {
+          gather(2);
+          [first, second] = bestPair();
+        }
+        if (
+          first < 0 ||
+          second < 0 ||
+          votes[first] < 2 ||
+          votes[second] < 2 ||
+          votes[current] > total * 0.5
+        )
+          continue;
+        const a = colors[first],
+          b = colors[second],
+          v = b.map((c, j) => c - a[j]),
           length = v.reduce((sum, c) => sum + c * c, 0);
         if (length < 100) continue;
         const t = Math.max(
-          0,
-          Math.min(
-            1,
-            v.reduce((sum, c, j) => sum + (pixel[j] - a[j]) * c, 0) / length,
+            0,
+            Math.min(
+              1,
+              v.reduce((sum, c, j) => sum + (pixel[j] - a[j]) * c, 0) / length,
+            ),
           ),
-        );
-        const blend: RGB = a.map((c, j) => c + t * v[j]) as RGB;
-        const residual = dist(pixel, blend);
-        if (residual < 160 && residual * 4 < dist(pixel, colors[current]))
-          filtered[i] = others[t < 0.5 ? 0 : 1][0];
+          blend = a.map((c, j) => c + t * v[j]) as RGB,
+          residual = dist(pixel, blend);
+        if (residual < 225 && residual * 4 < error)
+          filtered[i] = t < 0.5 ? first : second;
       }
   // Remove one-pixel burrs while retaining continuous thin lines. Work from
   // a snapshot each pass so color/scan ordering cannot affect the result.
@@ -382,8 +230,11 @@ export function vectorize(
       else if (code >= 1 && code <= 8)
         filtered[i] = count + Math.min(count - 1, code - 1);
     }
+  const hasPaint = overrides?.some(
+    (code) => (code >= 1 && code <= 8) || code === 255,
+  );
   const vertices = smooth
-    ? smoothBoundaries(filtered, width, height, preserve || !!overrides)
+    ? smoothBoundaries(filtered, width, height, preserve || !!hasPaint)
     : undefined;
   const counts = Array(count).fill(0),
     paintCounts = Array(count).fill(0);
@@ -415,6 +266,36 @@ export function vectorize(
 // Every color uses the SAME boundary graph. Smoothing each color separately
 // creates slivers and gaps in both the preview and the printed inlays. Junctions
 // stay fixed; only degree-two boundary vertices move, by less than one pixel.
+function smallRegions(labels: Uint8Array, w: number, h: number): Uint8Array {
+  const seen = new Uint8Array(labels.length),
+    small = new Uint8Array(labels.length),
+    queue = new Uint32Array(labels.length);
+  for (let start = 0; start < labels.length; start++) {
+    if (seen[start] || labels[start] === 255) continue;
+    const color = labels[start];
+    let head = 0,
+      tail = 1;
+    queue[0] = start;
+    seen[start] = 1;
+    const add = (i: number) => {
+      if (!seen[i] && labels[i] === color) {
+        seen[i] = 1;
+        queue[tail++] = i;
+      }
+    };
+    while (head < tail) {
+      const i = queue[head++],
+        x = i % w;
+      if (x) add(i - 1);
+      if (x + 1 < w) add(i + 1);
+      if (i >= w) add(i - w);
+      if (i + w < labels.length) add(i + w);
+    }
+    // Preserve the actual footprint of tiny accents and small interior holes.
+    if (tail <= 32) for (let i = 0; i < tail; i++) small[queue[i]] = 1;
+  }
+  return small;
+}
 function smoothBoundaries(
   labels: Uint8Array,
   w: number,
@@ -423,6 +304,9 @@ function smoothBoundaries(
 ) {
   const stride = w + 1;
   const fixed = new Set<number>();
+  const small = preserve ? smallRegions(labels, w, h) : undefined;
+  const labelAt = (x: number, y: number) =>
+    x < 0 || y < 0 || x >= w || y >= h ? 255 : labels[y * w + x];
   if (preserve)
     for (let y = 0; y < h; y++)
       for (let x = 0; x < w; x++) {
@@ -448,7 +332,12 @@ function smoothBoundaries(
               break;
             }
           }
-        if (!core)
+        const narrow =
+          (labelAt(x - 1, y) !== color && labelAt(x + 2, y) !== color) ||
+          (labelAt(x + 1, y) !== color && labelAt(x - 2, y) !== color) ||
+          (labelAt(x, y - 1) !== color && labelAt(x, y + 2) !== color) ||
+          (labelAt(x, y + 1) !== color && labelAt(x, y - 2) !== color);
+        if (!core || narrow || small?.[y * w + x])
           for (const key of [
             y * stride + x,
             y * stride + x + 1,
@@ -472,6 +361,46 @@ function smoothBoundaries(
     for (let x = 0; x <= w; x++)
       if (label(x - 1, y) !== label(x, y))
         link(y * stride + x, (y + 1) * stride + x);
+  if (preserve)
+    for (const [key, adjacent] of graph) {
+      if (adjacent.length !== 2) continue;
+      const x = key % stride,
+        y = Math.floor(key / stride);
+      const a = adjacent[0],
+        b = adjacent[1];
+      if ((a % stride === x) === (b % stride === x)) continue;
+      const straight = (first: number) => {
+        let previous = key,
+          at = first;
+        const dx = (first % stride) - x,
+          dy = Math.floor(first / stride) - y;
+        for (let step = 1; step <= 4; step++) {
+          if (
+            at % stride !== x + dx * step ||
+            Math.floor(at / stride) !== y + dy * step
+          )
+            return false;
+          if (step === 4) return true;
+          const next = graph.get(at);
+          if (next?.length !== 2) return false;
+          const follow = next[0] === previous ? next[1] : next[0];
+          previous = at;
+          at = follow;
+        }
+        return true;
+      };
+      if (straight(a) && straight(b)) fixed.add(key);
+    }
+  const bound = (key: number, p: Vec2): Vec2 => {
+    if (!preserve) return p;
+    const x = key % stride,
+      y = Math.floor(key / stride),
+      dx = p[0] - x,
+      dy = p[1] - y,
+      d = Math.hypot(dx, dy),
+      factor = d > 0.45 ? 0.45 / d : 1;
+    return [x + dx * factor, y + dy * factor];
+  };
   let points = new Map<number, Vec2>();
   for (const key of graph.keys())
     points.set(key, [key % stride, Math.floor(key / stride)]);
@@ -485,10 +414,13 @@ function smoothBoundaries(
       }
       const a = points.get(adjacent[0])!,
         b = points.get(adjacent[1])!;
-      next.set(key, [
-        p[0] * 0.4 + (a[0] + b[0]) * 0.3,
-        p[1] * 0.4 + (a[1] + b[1]) * 0.3,
-      ]);
+      next.set(
+        key,
+        bound(key, [
+          p[0] * 0.4 + (a[0] + b[0]) * 0.3,
+          p[1] * 0.4 + (a[1] + b[1]) * 0.3,
+        ]),
+      );
     }
     points = next;
   }
@@ -497,7 +429,9 @@ function smoothBoundaries(
   const visited = new Set<string>();
   const edgeKey = (a: number, b: number) => (a < b ? a + "," + b : b + "," + a);
   const simplify = (chain: number[]) => {
-    const refined = refineBoundary(chain.map((key) => points.get(key)!));
+    const refined = refineBoundary(chain.map((key) => points.get(key)!)).map(
+      (point, i) => bound(chain[i], point),
+    );
     for (let i = 0; i < chain.length; i++) points.set(chain[i], refined[i]);
     for (const i of simplifyIndices(refined, 0.06)) keep.add(chain[i]);
   };

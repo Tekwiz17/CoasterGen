@@ -813,3 +813,314 @@ test("cleanup masks validate, restore automatic colors, and can repaint removed 
     parseProject({ ...p, cleanupMask: "https://example.com/mask.png" }),
   );
 });
+
+const loopArea = (loop: number[][]) =>
+  Math.abs(
+    loop.reduce((sum, p, i) => {
+      const q = loop[(i + 1) % loop.length];
+      return sum + p[0] * q[1] - q[0] * p[1];
+    }, 0) / 2,
+  );
+test("tiny smoothed accents and holes keep their real area, not just their pixel counts", () => {
+  const n = 48;
+  for (let size = 1; size <= 7; size++) {
+    const data = new Uint8ClampedArray(n * n * 4).fill(255);
+    for (let y = 20; y < 20 + size; y++)
+      for (let x = 20; x < 20 + size; x++)
+        data.set([0, 0, 0, 255], (y * n + x) * 4);
+    const art = vectorize(data, n, n, 2, "#FFFFFF", false, true, undefined, {
+      preserveDetails: true,
+    });
+    assert.equal(art.counts[1], size * size);
+    assert.ok(
+      Math.abs(
+        art.loops[1].reduce((s, l) => s + loopArea(l), 0) - size * size,
+      ) < 0.001,
+      `${size}px accent keeps its area`,
+    );
+    const reversed = data.map((v, i) => (i % 4 === 3 ? v : 255 - v));
+    const hole = vectorize(
+      reversed,
+      n,
+      n,
+      2,
+      "#FFFFFF",
+      false,
+      true,
+      ["#FFFFFF", "#000000"],
+      { preserveDetails: true },
+    );
+    assert.equal(hole.loops[1].length, 2);
+    assert.ok(
+      Math.abs(Math.min(...hole.loops[1].map(loopArea)) - size * size) < 0.001,
+      "Small interior holes keep their footprint",
+    );
+  }
+});
+
+test("edge mixtures do not steal a filament from a one-pixel accent, including at image borders", () => {
+  const w = 128,
+    h = 64,
+    data = new Uint8ClampedArray(w * h * 4).fill(255);
+  for (let y = 0; y < h; y++)
+    for (let x = 0; x < 64; x++) data.set([20, 30, 55, 255], (y * w + x) * 4);
+  for (let y = 0; y < h; y++) data.set([138, 143, 155, 255], (y * w + 64) * 4);
+  data.set([230, 30, 70, 255], (30 * w + 30) * 4);
+  for (const base of ["#FFFFFF", "#F2E9D8"]) {
+    const art = vectorize(data, w, h, 3, base, false, true, undefined, {
+      preserveDetails: true,
+    });
+    const red = art.sourceColors.indexOf("#E61E46");
+    assert.ok(red > 0);
+    assert.equal(art.counts[red], 1);
+    assert.ok(
+      !art.sourceColors.includes("#8A8F9B"),
+      "An antialias mixture is not a new filament",
+    );
+    assert.equal(art.counts[0], (w * h) / 2);
+    assert.equal(
+      art.loops[red].reduce((s, l) => s + loopArea(l), 0),
+      1,
+    );
+  }
+  const four = vectorize(data, w, h, 4, "#FFFFFF", false, true, undefined, {
+    preserveDetails: true,
+  });
+  assert.equal(
+    four.counts.filter((n) => n > 0).length,
+    3,
+    "An extra filament does not manufacture a false edge color",
+  );
+});
+
+test("subtle source colors in the same RGB bucket remain distinct with automatic and saved palettes", () => {
+  const n = 40,
+    data = new Uint8ClampedArray(n * n * 4);
+  for (let i = 0; i < n * n; i++) data.set([100, 100, 100, 255], i * 4);
+  for (let y = 15; y < 18; y++)
+    for (let x = 15; x < 18; x++)
+      data.set([102, 100, 100, 255], (y * n + x) * 4);
+  const automatic = vectorize(
+    data,
+    n,
+    n,
+    2,
+    "#646464",
+    false,
+    true,
+    undefined,
+    { preserveDetails: true },
+  );
+  assert.equal(automatic.sourceColors[1], "#666464");
+  assert.equal(automatic.counts[1], 9);
+  const restored = vectorize(
+    data,
+    n,
+    n,
+    2,
+    "#646464",
+    false,
+    true,
+    automatic.sourceColors,
+    { preserveDetails: true },
+  );
+  assert.deepEqual(restored, automatic);
+});
+
+test("two-pixel channels and straight corners remain open and export as watertight inlays", () => {
+  const n = 64,
+    data = new Uint8ClampedArray(n * n * 4).fill(255);
+  for (let y = 10; y < 54; y++)
+    for (let x = 10; x < 54; x++)
+      if (x < 31 || x > 32) data.set([0, 0, 0, 255], (y * n + x) * 4);
+  const art = vectorize(data, n, n, 2, "#FFFFFF", false, true, undefined, {
+    preserveDetails: true,
+  });
+  assert.equal(art.loops[1].length, 2);
+  const [a, b] = art.loops[1]
+    .slice()
+    .sort(
+      (a, b) =>
+        Math.min(...a.map((p) => p[0])) - Math.min(...b.map((p) => p[0])),
+    );
+  assert.equal(
+    Math.min(...b.map((p) => p[0])) - Math.max(...a.map((p) => p[0])),
+    2,
+  );
+  assert.equal(
+    art.loops[1].reduce((s, l) => s + loopArea(l), 0),
+    44 * 42,
+  );
+  buildModel(
+    api,
+    project({ colorCount: 2, colors: art.sourceColors, mapping: [0, 1] }),
+    art,
+  ).parts.forEach(watertight);
+});
+
+test("background removal uses the edge majority and retains pale details beside transparent corners", () => {
+  const n = 40,
+    data = new Uint8ClampedArray(n * n * 4).fill(255);
+  for (let y = 0; y < 4; y++)
+    for (let x = 0; x < 4; x++) data.set([20, 30, 55, 255], (y * n + x) * 4);
+  for (let y = 20; y < 24; y++)
+    for (let x = 20; x < 24; x++)
+      data.set([235, 238, 243, 255], (y * n + x) * 4);
+  for (const cornersTransparent of [false, true]) {
+    const pixels = data.slice();
+    if (cornersTransparent)
+      for (const i of [0, n - 1, n * (n - 1), n * n - 1]) pixels[i * 4 + 3] = 0;
+    const art = vectorize(pixels, n, n, 3, "#FFFFFF", true, true, undefined, {
+      preserveDetails: true,
+    });
+    assert.equal(art.pixels, cornersTransparent ? 31 : 32);
+    assert.equal(
+      art.removed,
+      n * n - (cornersTransparent ? 4 : 0) - art.pixels,
+      "Already transparent pixels are not counted as newly removed",
+    );
+    assert.ok(art.sourceColors.includes("#EBEEF3"));
+    assert.ok(art.sourceColors.includes("#141E37"));
+  }
+});
+
+test("photographic gradients use real source colors and keep a bounded perceptual error", async () => {
+  const { lab, rgb, distance } = await import("../src/lib/color");
+  const n = 128,
+    data = new Uint8ClampedArray(n * n * 4),
+    source = new Set<string>();
+  for (let y = 0; y < n; y++)
+    for (let x = 0; x < n; x++) {
+      const color = [
+        30 + Math.floor(x * 1.5),
+        35 + Math.floor(y * 1.5),
+        45 + Math.floor((x + y) * 0.7),
+        255,
+      ];
+      data.set(color, (y * n + x) * 4);
+      source.add(color.slice(0, 3).join(","));
+    }
+  const art = vectorize(data, n, n, 5, "#FFFFFF", false, true, undefined, {
+      preserveDetails: true,
+    }),
+    palette = art.sourceColors.map((c) => lab(rgb(c)));
+  for (const color of art.sourceColors.slice(1))
+    assert.ok(
+      source.has(rgb(color).join(",")),
+      "No invented RGB mixture in the fitted palette",
+    );
+  let error = 0;
+  for (let i = 0; i < n * n; i++) {
+    const c = lab([data[i * 4], data[i * 4 + 1], data[i * 4 + 2]]);
+    error += Math.min(...palette.map((p) => distance(c, p)));
+  }
+  assert.ok(
+    error / (n * n) < 0.007,
+    "The palette covers the full smooth color range",
+  );
+  const restored = vectorize(
+    data,
+    n,
+    n,
+    5,
+    "#FFFFFF",
+    false,
+    true,
+    art.sourceColors,
+    { preserveDetails: true },
+  );
+  assert.deepEqual(restored, art);
+});
+
+test("dominant illustration colors stay exact despite many low-population edge shades", () => {
+  const n = 96,
+    colors = [
+      [242, 233, 216],
+      [8, 10, 10],
+      [203, 47, 51],
+      [22, 109, 203],
+    ],
+    data = new Uint8ClampedArray(n * n * 4);
+  for (let y = 0; y < n; y++)
+    for (let x = 0; x < n; x++)
+      data.set(
+        [...colors[(x < 48 ? 0 : 1) + (y < 48 ? 0 : 2)], 255],
+        (y * n + x) * 4,
+      );
+  for (let i = 0; i < 700; i++) {
+    const x = 48 + (i % 48),
+      y = 48 + Math.floor(i / 48);
+    data.set(
+      [20 + (i % 40) * 3, 70 + (i % 31) * 3, 160 + (i % 29) * 3, 255],
+      (y * n + x) * 4,
+    );
+  }
+  const art = vectorize(data, n, n, 4, "#F2E9D8", false, true, undefined, {
+    preserveDetails: true,
+  });
+  assert.ok(art.sourceColors.includes("#080A0A"));
+  assert.ok(art.sourceColors.includes("#CB2F33"));
+  assert.ok(art.sourceColors.includes("#166DCB"));
+});
+
+test("detail protection still smooths larger curves without changing their area", () => {
+  const n = 128,
+    data = new Uint8ClampedArray(n * n * 4).fill(255);
+  let rawPerimeter = 0;
+  const inside = (x: number, y: number) => {
+    const d = Math.hypot(x - 63.5, y - 63.5);
+    return d <= 42 && d >= 12;
+  };
+  for (let y = 0; y < n; y++)
+    for (let x = 0; x < n; x++)
+      if (inside(x, y)) {
+        data.set([0, 0, 0, 255], (y * n + x) * 4);
+        for (const [dx, dy] of [
+          [1, 0],
+          [-1, 0],
+          [0, 1],
+          [0, -1],
+        ])
+          if (!inside(x + dx, y + dy)) rawPerimeter++;
+      }
+  const art = vectorize(data, n, n, 2, "#FFFFFF", false, true, undefined, {
+    preserveDetails: true,
+  });
+  assert.equal(art.loops[1].length, 2);
+  const areas = art.loops[1].map(loopArea).sort((a, b) => b - a),
+    area = areas[0] - areas[1];
+  assert.ok(Math.abs(area - art.counts[1]) / art.counts[1] < 0.01);
+  const perimeter = art.loops[1].reduce(
+    (sum, loop) =>
+      sum +
+      loop.reduce((s, p, i) => {
+        const q = loop[(i + 1) % loop.length];
+        return s + Math.hypot(p[0] - q[0], p[1] - q[1]);
+      }, 0),
+    0,
+  );
+  assert.ok(
+    perimeter < rawPerimeter * 0.95,
+    "Smooth curves retain fewer pixel stair steps",
+  );
+});
+
+test("blank template is a watertight base without a missing-artwork warning", () => {
+  const p = project({
+    sample: "blank",
+    source: "",
+    colorCount: 2,
+    colors: ["#FFFFFF", "#FFFFFF"],
+    mapping: [0, 1],
+  });
+  const model = buildModel(api, p, blank);
+  assert.equal(model.parts.length, 1);
+  assert.equal(model.parts[0].colorIndex, 0);
+  assert.deepEqual(model.warnings, []);
+  watertight(model.parts[0]);
+  assert.equal(
+    buildModel(api, { ...p, source: "data:image/png;base64,empty" }, blank)
+      .warnings.length,
+    1,
+  );
+});

@@ -9,6 +9,7 @@ import {
   Paintbrush,
 } from "lucide-react";
 import type { Artwork, Project } from "../types";
+import { nearestColorIndex } from "../lib/color";
 import { loadPixels } from "../lib/image";
 import { loadCleanupMask } from "../lib/cleanup";
 import { vectorizeImage } from "../lib/engine";
@@ -47,11 +48,14 @@ export default function ImportDialog({
   const [detail, setDetail] = useState(
     editingExisting ? project.detail : Math.max(768, project.detail),
   );
+  const quality = !preserve && remove && smooth && detail === 1024;
   const [edits, setEdits] = useState([
     { id: 0, mask: editingExisting ? project.cleanupMask : "" },
   ]);
   const [future, setFuture] = useState<typeof edits>([]);
   const customized = useRef(false);
+  const rematchPending = useRef(false);
+  const [matchingRevision, setMatchingRevision] = useState(0);
   const editId = useRef(0),
     edited = edits[edits.length - 1];
   const [cleanup, setCleanup] = useState(false),
@@ -67,6 +71,7 @@ export default function ImportDialog({
       preserve,
       detail,
       project.colors[0],
+      matchingRevision,
     ]),
     key = JSON.stringify([edited.id, optionsKey]);
   const original = useRef<{
@@ -100,6 +105,7 @@ export default function ImportDialog({
           const pixels = await loadPixels(source, detail);
           if (!active) return;
           const palette =
+            !matchingRevision &&
             editingExisting &&
             project.sourcePalette.length === count &&
             detail === project.detail &&
@@ -139,14 +145,17 @@ export default function ImportDialog({
               overrides,
             })
           : basis.art;
-        if (active)
+        if (active) {
+          const rematching = rematchPending.current;
+          rematchPending.current = false;
           setResult((previous) => ({
             key,
             optionsKey,
             art,
             baseArt: basis.art,
-            colors:
-              previous?.optionsKey === optionsKey
+            colors: rematching
+              ? [project.colors[0], ...art.sourceColors.slice(1)]
+              : previous?.optionsKey === optionsKey
                 ? previous.colors
                 : previous && (customized.current || editingExisting)
                   ? Array.from(
@@ -156,31 +165,18 @@ export default function ImportDialog({
                   : editingExisting && count === project.colorCount
                     ? project.colors.slice(0, count)
                     : [project.colors[0], ...art.sourceColors.slice(1)],
-            mapping:
-              previous?.optionsKey === optionsKey
+            mapping: rematching
+              ? Array.from({ length: count }, (_, i) => i)
+              : previous?.optionsKey === optionsKey
                 ? previous.mapping
                 : previous && (customized.current || editingExisting)
                   ? art.sourceColors.map((color, i) => {
                       if (!i)
                         return Math.min(count - 1, previous.mapping[0] ?? 0);
-                      const rgb = (c: string) =>
-                          c
-                            .slice(1)
-                            .match(/../g)!
-                            .map((v) => parseInt(v, 16)),
-                        target = rgb(color);
-                      let best = 0,
-                        distance = Infinity;
-                      previous.art.sourceColors.forEach((c, j) => {
-                        const d = rgb(c).reduce(
-                          (s, n, k) => s + (n - target[k]) ** 2,
-                          0,
-                        );
-                        if (d < distance) {
-                          best = j;
-                          distance = d;
-                        }
-                      });
+                      const best = nearestColorIndex(
+                        color,
+                        previous.art.sourceColors,
+                      );
                       return Math.min(
                         count - 1,
                         previous.mapping[best] ?? best,
@@ -190,6 +186,7 @@ export default function ImportDialog({
                     ? project.mapping
                     : Array.from({ length: count }, (_, i) => i),
           }));
+        }
       } catch (e) {
         if (active) setFailure({ key, text: (e as Error).message });
       }
@@ -250,9 +247,34 @@ export default function ImportDialog({
       onClose={onClose}
     >
       <p className="modal-lead">
-        Choose your color limit, then paint over any areas that need a different
-        filament.
+        Choose a starting point, check the colors, then touch up any area with
+        Paint & erase.
       </p>
+      <div className="import-preset" aria-label="Import mode">
+        <div>
+          <strong>
+            {quality ? "Quality mode is on" : "A cleaner starting point"}
+          </strong>
+          <p>
+            Extra-high detail, smooth edges, and background removal. Tiny
+            details are simplified.
+          </p>
+        </div>
+        <button
+          className={"button small " + (quality ? "primary" : "light")}
+          aria-pressed={quality}
+          disabled={drawing}
+          onClick={() => {
+            setLivePreview("");
+            setPreserve(false);
+            setRemove(true);
+            setDetail(1024);
+            setSmooth(true);
+          }}
+        >
+          Quality
+        </button>
+      </div>
       <div className="cleanup-tools">
         <button
           className={"button light small" + (cleanup ? " active" : "")}
@@ -449,7 +471,7 @@ export default function ImportDialog({
               <option value={320}>Standard · 320 px</option>
               <option value={512}>High · 512 px</option>
               <option value={768}>Fine · 768 px</option>
-              <option value={1024}>Extra fine · 1024 px</option>
+              <option value={1024}>Extra high · 1024 px</option>
             </select>
           </label>
           <Toggle
@@ -493,6 +515,25 @@ export default function ImportDialog({
               <summary>
                 Filament colors <span>Click a swatch to change it</span>
               </summary>
+              <div className="image-rematch">
+                <button
+                  className="button light small"
+                  disabled={!current || drawing}
+                  onClick={() => {
+                    rematchPending.current = true;
+                    customized.current = false;
+                    setLivePreview("");
+                    setMatchingRevision((v) => v + 1);
+                  }}
+                >
+                  <RotateCcw size={14} />
+                  Match original colors
+                </button>
+                <small>
+                  Refreshes filament colors. Your brush corrections stay in
+                  place.
+                </small>
+              </div>
               <Filaments
                 colors={shown.colors}
                 onChange={(colors) => {
