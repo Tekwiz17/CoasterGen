@@ -23,7 +23,7 @@ Vercel uses the Vite preset and `dist` output. No environment variables, databas
 - PNG, JPG, WebP, and self-contained SVG artwork. Images never upload.
 - Perceptual OKLab color quantization, edge-connected background removal, and vector contour tracing in a Web Worker.
 - 2–8 total filament slots; four by default, including the base. Custom filament colors and explicit detected-color-to-slot mapping.
-- Artwork scaling, rotation, mirroring, X/Y position, centering, and direct dragging in 2D.
+- Artwork scaling, rotation, mirroring, X/Y position, centering, direct dragging in 2D, visible-artwork centering, six alignment buttons, center guides, and center/border snapping (hold Alt/Option to bypass).
 - Live 3D orbit/zoom and an underside view. A 2D fallback works without WebGL.
 - Real boolean-cut underside magnet pockets: one center magnet or 2–8 outer magnets. Outer edge gap is measured from pocket wall to the conservative inscribed coaster edge; hexagon/square corner pockets may sit farther from the actual outline. Pocket diameter is magnet diameter plus selected diametral clearance. Pocket depth is magnet thickness plus 0.1 mm. Validation requires at least 0.6 mm of roof below the artwork and 0.8 mm edge/separation walls.
 - A flush top color layer, included in total height. Manifold generates watertight color meshes and nonoverlapping inlays.

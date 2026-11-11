@@ -1,0 +1,42 @@
+{
+  "name": "coastergen",
+  "version": "1.0.0",
+  "description": "An on-device studio for print-ready multicolor coasters",
+  "scripts": {
+    "dev": "vite --host 0.0.0.0",
+    "build": "tsc -b && vite build",
+    "preview": "vite preview --host 0.0.0.0",
+    "test": "node --import tsx --test tests/geometry.test.ts",
+    "test:e2e": "playwright test",
+    "format": "prettier --write src tests *.ts *.json README.md",
+    "format:check": "prettier --check src tests *.ts *.json README.md"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "module",
+  "dependencies": {
+    "@fontsource-variable/dm-sans": "^5.3.0",
+    "@fontsource-variable/manrope": "^5.3.0",
+    "fflate": "^0.8.3",
+    "lucide-react": "^1.71.0",
+    "manifold-3d": "^3.5.4",
+    "react": "^19.3.1",
+    "react-dom": "^19.3.1",
+    "three": "^0.187.0"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.65.0",
+    "@types/node": "^26.6.6",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "@types/three": "^0.187.0",
+    "@vitejs/plugin-react": "^6.3.0",
+    "fast-xml-parser": "^5.12.0",
+    "prettier": "^3.9.10",
+    "tsx": "^4.23.15",
+    "typescript": "^7.0.2",
+    "vite": "^8.3.7"
+  },
+  "private": true
+}
