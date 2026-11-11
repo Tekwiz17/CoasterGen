@@ -5,6 +5,7 @@ export function connectedArea(
   height: number,
   x: number,
   y: number,
+  boundaries: Uint8ClampedArray = data,
 ) {
   const start = Math.floor(y) * width + Math.floor(x);
   if (x < 0 || y < 0 || x >= width || y >= height || data[start * 4 + 3] < 128)
@@ -16,11 +17,15 @@ export function connectedArea(
   const add = (i: number) => {
     if (seen[i]) return;
     seen[i] = 1;
-    if (data[i * 4 + 3] < 128) return;
+    if (data[i * 4 + 3] < 128 || boundaries[i * 4 + 3] < 128) return;
     let error = 0;
     for (let c = 0; c < 3; c++)
       error += (data[i * 4 + c] - data[start * 4 + c]) ** 2;
     if (error > 32 ** 2) return;
+    let originalError = 0;
+    for (let c = 0; c < 3; c++)
+      originalError += (boundaries[i * 4 + c] - boundaries[start * 4 + c]) ** 2;
+    if (originalError > 32 ** 2) return;
     queue[tail++] = i;
   };
   add(start);

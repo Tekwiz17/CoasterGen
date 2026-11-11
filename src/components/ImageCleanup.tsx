@@ -27,6 +27,7 @@ interface Surface {
   scratch: HTMLCanvasElement;
   codes: ImageData;
   base: ImageData;
+  boundaries: Uint8ClampedArray;
   view: ImageData;
 }
 const makeCanvas = (width: number, height: number) => {
@@ -142,6 +143,7 @@ export default function ImageCleanup({
         maskCanvas,
         codes: codeImage,
         base,
+        boundaries: new Uint8ClampedArray(data),
         view,
         scratch: makeCanvas(width, height),
       };
@@ -277,7 +279,14 @@ export default function ImageCleanup({
   function fill(pt: Point) {
     const s = surface.current;
     if (!s || !canvas.current) return;
-    const area = connectedArea(s.view.data, s.width, s.height, pt.x, pt.y);
+    const area = connectedArea(
+      s.view.data,
+      s.width,
+      s.height,
+      pt.x,
+      pt.y,
+      s.boundaries,
+    );
     if (!area.length) return;
     const color = rgb(colors[Math.min(slot, colors.length - 1)]);
     for (const i of area) {

@@ -1138,3 +1138,15 @@ test("area fill stays inside one connected island and respects holes and transpa
   assert.equal(connectedArea(data, 7, 5, 1, 2).length, 0);
   assert.equal(connectedArea(data, 7, 5, -1, 2).length, 0);
 });
+
+test("fills retain original boundaries after adjacent regions become the same color", async () => {
+  const { connectedArea } = await import("../src/lib/regions");
+  const original = new Uint8ClampedArray([
+    255, 0, 0, 255, 255, 0, 0, 255, 0, 0, 255, 255, 0, 0, 255, 255,
+  ]);
+  const recolored = new Uint8ClampedArray([
+    0, 255, 0, 255, 0, 255, 0, 255, 0, 255, 0, 255, 0, 255, 0, 255,
+  ]);
+  assert.deepEqual([...connectedArea(recolored, 4, 1, 0, 0, original)], [0, 1]);
+  assert.deepEqual([...connectedArea(recolored, 4, 1, 3, 0, original)], [3, 2]);
+});
