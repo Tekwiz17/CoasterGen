@@ -1,11 +1,4 @@
-import {
-  useState,
-  useEffect,
-  useRef,
-  useCallback,
-  lazy,
-  Suspense,
-} from "react";
+import { lazy, Suspense, useEffect, useRef, useState } from "react";
 import {
   AlignHorizontalJustifyCenter,
   AlignHorizontalJustifyStart,
@@ -13,270 +6,169 @@ import {
   AlignVerticalJustifyCenter,
   AlignVerticalJustifyStart,
   AlignVerticalJustifyEnd,
-  ArrowDownToLine,
   ArrowRight,
   ArrowUpRight,
   Box,
   Check,
-  CheckCheck,
   ChevronDown,
   Circle,
   CircleHelp,
   Crosshair,
   Download,
-  ExternalLink,
-  FileImage,
-  FileJson,
   FlipHorizontal2,
   FolderOpen,
-  Code2,
   Hexagon,
   ImagePlus,
   Layers3,
   LoaderCircle,
-  LockKeyhole,
   Magnet,
   Maximize,
   Minus,
-  MousePointer2,
-  Move,
-  Palette,
   Plus,
   Redo2,
   RotateCcw,
   Ruler,
   Save,
-  ShieldCheck,
-  SlidersHorizontal,
-  Sparkles,
   Square,
   Undo2,
   Upload,
-  WandSparkles,
   X,
 } from "lucide-react";
-import {
-  DEFAULT_PROJECT,
-  DEFAULT_COLORS,
-  colorName,
-  type Project,
-  type Artwork,
-  type ModelData,
-} from "./types";
+import { DEFAULT_PROJECT, type Project } from "./types";
 import { SAMPLES, svgDataUrl } from "./samples";
-import { loadPixels, readArtwork, download, filename } from "./lib/image";
-import { generateModel, vectorizeImage } from "./lib/engine";
-import { validate, magnetCenters } from "./lib/geometry";
+import { download, filename, readArtwork } from "./lib/image";
+import { useCoaster } from "./lib/useCoaster";
 import { alignArtwork, type Alignment } from "./lib/alignment";
-import { export3mf, exportSvg, exportStl } from "./lib/export";
-import { loadLocal, saveLocal, parseProject } from "./lib/storage";
-import { Section, Field, Slider, Toggle } from "./components/Controls";
+import { magnetCenters } from "./lib/geometry";
+import { parseProject } from "./lib/storage";
+import { export3mf, exportStl, exportSvg } from "./lib/export";
+import { Field, Section, Slider, Toggle } from "./components/Controls";
+import {
+  ColorCount,
+  ColorMapping,
+  Filaments,
+} from "./components/ColorControls";
+import { BambuLogo, GitHubLogo } from "./components/BrandIcons";
 import FlatPreview from "./components/FlatPreview";
+import ImportDialog from "./components/ImportDialog";
 import Modal from "./components/Modal";
+import Tutorial from "./components/Tutorial";
 const ModelViewer = lazy(() => import("./components/ModelViewer"));
 type Tab = "coaster" | "artwork" | "magnets";
-type Dialog = "help" | "export" | "bambu" | "new" | null;
+type Dialog = "tutorial" | "export" | "bambu" | "reset" | null;
+const alignmentButtons = [
+  { id: "left", label: "Align left", Icon: AlignHorizontalJustifyStart },
+  {
+    id: "centerX",
+    label: "Center horizontally",
+    Icon: AlignHorizontalJustifyCenter,
+  },
+  { id: "right", label: "Align right", Icon: AlignHorizontalJustifyEnd },
+  { id: "top", label: "Align top", Icon: AlignVerticalJustifyStart },
+  {
+    id: "centerY",
+    label: "Center vertically",
+    Icon: AlignVerticalJustifyCenter,
+  },
+  { id: "bottom", label: "Align bottom", Icon: AlignVerticalJustifyEnd },
+] as const;
+
 export default function App() {
-  const [p, setP] = useState<Project>({
-    ...DEFAULT_PROJECT,
-    colors: [...DEFAULT_COLORS],
-  });
-  const [ready, setReady] = useState(false),
-    [art, setArt] = useState<Artwork | null>(null),
-    [model, setModel] = useState<ModelData | null>(null);
-  const [processing, setProcessing] = useState(true),
-    [building, setBuilding] = useState(true),
-    [error, setError] = useState("");
-  const [view, setView] = useState<"3d" | "2d">("3d"),
-    [bottom, setBottom] = useState(false),
-    [zoom, setZoom] = useState(1),
-    [reset, setReset] = useState(0);
-  const [tab, setTab] = useState<Tab>("coaster"),
-    [dialog, setDialog] = useState<Dialog>(null),
-    [saved, setSaved] = useState("Saving locally"),
-    [toast, setToast] = useState("");
-  const [dragging, setDragging] = useState(false),
-    [recolor, setRecolor] = useState(0),
-    [exporting, setExporting] = useState(false),
-    [bambuReady, setBambuReady] = useState(false);
-  const [historyTick, setHistoryTick] = useState(0),
-    [showMap, setShowMap] = useState(false);
-  const dragStartProject = useRef<Project | null>(null);
-  const history = useRef<Project[]>([]),
-    future = useRef<Project[]>([]),
-    autoPalette = useRef(true),
-    restorePalette = useRef(false);
-  const fileInput = useRef<HTMLInputElement>(null),
-    projectInput = useRef<HTMLInputElement>(null),
-    toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const notify = useCallback((s: string) => {
-    setToast(s);
-    if (toastTimer.current) clearTimeout(toastTimer.current);
-    toastTimer.current = setTimeout(() => setToast(""), 4500);
-  }, []);
-  const change = useCallback(
-    (patch: Partial<Project>) =>
-      setP((prev) => {
-        history.current.push(prev);
-        if (history.current.length > 50) history.current.shift();
-        future.current = [];
-        setHistoryTick((t) => t + 1);
-        return { ...prev, ...patch };
-      }),
-    [],
-  );
-  const undo = useCallback(() => {
-    const prev = history.current.pop();
-    if (prev) {
-      setP((current) => {
-        future.current.push(current);
-        return prev;
-      });
-      setHistoryTick((t) => t + 1);
+  const editor = useCoaster();
+  const {
+    p,
+    art,
+    model,
+    processing,
+    building,
+    error,
+    issues,
+    change,
+    canExport,
+  } = editor;
+  const [tab, setTab] = useState<Tab>("coaster");
+  const [view, setView] = useState<"2d" | "3d">("2d");
+  const [bottom, setBottom] = useState(false);
+  const [zoom, setZoom] = useState(1);
+  const [reset, setReset] = useState(0);
+  const [dialog, setDialog] = useState<Dialog>(null);
+  const [pendingImage, setPendingImage] = useState<{
+    source: string;
+    name: string;
+  } | null>(null);
+  const [toast, setToast] = useState("");
+  const [dragging, setDragging] = useState(false);
+  const [reading, setReading] = useState(false);
+  const [exporting, setExporting] = useState(false);
+  const [bambuReady, setBambuReady] = useState(false);
+  const fileInput = useRef<HTMLInputElement>(null);
+  const projectInput = useRef<HTMLInputElement>(null);
+  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const uploadId = useRef(0);
+  const dragStart = useRef<Project | null>(null);
+  const modalOpen = !!dialog || !!pendingImage;
+  function notify(message: string) {
+    if (timer.current) clearTimeout(timer.current);
+    setToast(message);
+    timer.current = setTimeout(() => setToast(""), 4500);
+  }
+  useEffect(() => {
+    try {
+      if (!localStorage.getItem("coastergen-tutorial-v2"))
+        setDialog("tutorial");
+    } catch {
+      setDialog("tutorial");
     }
-  }, []);
-  const redo = useCallback(() => {
-    const next = future.current.pop();
-    if (next) {
-      setP((current) => {
-        history.current.push(current);
-        return next;
-      });
-      setHistoryTick((t) => t + 1);
-    }
-  }, []);
-  useEffect(() => {
-    loadLocal().then((saved) => {
-      if (saved) {
-        autoPalette.current = false;
-        restorePalette.current = true;
-        setP(saved);
-      }
-      setReady(true);
-    });
-  }, []);
-  useEffect(() => {
-    if (!ready) return;
-    setSaved("Saving locally");
-    const timer = setTimeout(
-      () =>
-        saveLocal(p)
-          .then(() => setSaved("Saved on this device"))
-          .catch(() => setSaved("Session only · save a copy")),
-      700,
-    );
-    return () => clearTimeout(timer);
-  }, [p, ready]);
-  useEffect(() => {
-    if (!ready) return;
-    let cancelled = false;
-    setProcessing(true);
-    setArt(null);
-    setError("");
-    const run = async () => {
-      try {
-        const source =
-          p.source ||
-          svgDataUrl(
-            SAMPLES.find((x) => x.id === p.sample)?.svg ?? SAMPLES[0].svg,
-          );
-        const image = await loadPixels(source, p.detail);
-        const artwork = await vectorizeImage({
-          ...image,
-          count: p.colorCount,
-          base: p.matchBase,
-          remove: p.removeBackground,
-        });
-        if (cancelled) return;
-        setArt(artwork);
-        if (autoPalette.current && !restorePalette.current) {
-          setP((prev) => ({
-            ...prev,
-            colors: [prev.colors[0], ...artwork.sourceColors.slice(1)],
-            mapping: Array.from({ length: prev.colorCount }, (_, i) => i),
-          }));
-        }
-        autoPalette.current = false;
-        restorePalette.current = false;
-      } catch (e) {
-        if (!cancelled) setError((e as Error).message);
-      } finally {
-        if (!cancelled) setProcessing(false);
-      }
-    };
-    run();
     return () => {
-      cancelled = true;
+      if (timer.current) clearTimeout(timer.current);
     };
-  }, [
-    ready,
-    p.source,
-    p.sample,
-    p.colorCount,
-    p.removeBackground,
-    p.detail,
-    p.matchBase,
-    recolor,
-  ]);
-  const issues = validate(p);
-  const geometryKey = JSON.stringify([
-    p.shape,
-    p.diameter,
-    p.thickness,
-    p.inlayDepth,
-    p.margin,
-    p.artScale,
-    p.artX,
-    p.artY,
-    p.rotation,
-    p.mirror,
-    p.mapping,
-    p.magnetMode,
-    p.magnetDiameter,
-    p.magnetDepth,
-    p.magnetCount,
-    p.edgeGap,
-    p.clearance,
-  ]);
-  useEffect(() => {
-    if (!art || processing) {
-      setBuilding(true);
-      return;
+  }, []);
+  function closeTutorial() {
+    try {
+      localStorage.setItem("coastergen-tutorial-v2", "done");
+    } catch {
+      /* Session only. */
     }
-    let cancelled = false;
-    if (issues.length) {
-      setBuilding(false);
-      setModel(null);
-      return;
+    setDialog(null);
+  }
+  async function upload(file?: File) {
+    if (!file) return;
+    const id = ++uploadId.current;
+    setReading(true);
+    try {
+      const source = await readArtwork(file);
+      if (id === uploadId.current) setPendingImage({ source, name: file.name });
+    } catch (e) {
+      notify((e as Error).message);
+    } finally {
+      if (id === uploadId.current) setReading(false);
     }
-    setBuilding(true);
-    const timer = setTimeout(
-      () =>
-        generateModel(p, art)
-          .then((result) => {
-            if (!cancelled) {
-              setModel(result);
-              setError("");
-              setBuilding(false);
-            }
-          })
-          .catch((e) => {
-            if (!cancelled) {
-              setError(e.message);
-              setModel(null);
-              setBuilding(false);
-            }
-          }),
-      180,
+  }
+  async function openProject(file?: File) {
+    if (!file) return;
+    try {
+      if (file.size > 30e6) throw new Error("Choose a project under 30 MB.");
+      const next = parseProject(JSON.parse(await file.text()));
+      editor.loadProject(next);
+      setZoom(1);
+      setBottom(false);
+      notify("Project opened.");
+    } catch (e) {
+      notify((e as Error).message);
+    }
+  }
+  function saveProject() {
+    download(
+      JSON.stringify(p, null, 2),
+      filename(p) + ".coaster.json",
+      "application/json",
     );
-    return () => {
-      cancelled = true;
-      clearTimeout(timer);
-    };
-  }, [art, processing, geometryKey]);
+    notify("Project saved with the original image and all settings.");
+  }
   useEffect(() => {
-    const handler = (e: KeyboardEvent) => {
+    function keys(e: KeyboardEvent) {
       if (
+        modalOpen ||
         (e.target as HTMLElement).closest(
           "input,textarea,select,[contenteditable]",
         )
@@ -284,107 +176,105 @@ export default function App() {
         return;
       if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "z") {
         e.preventDefault();
-        if (e.shiftKey) redo();
-        else undo();
+        e.shiftKey ? editor.redo() : editor.undo();
       }
-      if ((e.ctrlKey || e.metaKey) && e.key === "s") {
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "s") {
         e.preventDefault();
-        download(
-          JSON.stringify(p, null, 2),
-          filename(p) + ".coaster.json",
-          "application/json",
-        );
-        notify("Project saved. Open it here whenever you like.");
+        saveProject();
       }
       if (e.key.toLowerCase() === "f") {
         setZoom(1);
-        setReset((t) => t + 1);
+        setReset((v) => v + 1);
       }
-    };
-    window.addEventListener("keydown", handler);
-    return () => window.removeEventListener("keydown", handler);
-  }, [p, undo, redo, notify]);
-  const upload = async (file?: File) => {
-    if (!file) return;
-    try {
-      const source = await readArtwork(file);
-      autoPalette.current = true;
-      restorePalette.current = false;
-      change({
-        source,
-        sourceName: file.name,
-        matchBase: p.colors[0],
-        sample: "",
+    }
+    window.addEventListener("keydown", keys);
+    return () => window.removeEventListener("keydown", keys);
+  }, [p, modalOpen, editor.undo, editor.redo]);
+  function align(direction: Alignment) {
+    if (!art) return;
+    change(alignArtwork(direction, p, art));
+    setView("2d");
+    setBottom(false);
+  }
+  function chooseSample(id: string) {
+    const sample = SAMPLES.find((s) => s.id === id)!;
+    change(
+      {
+        source: "",
+        sample: id,
+        sourceName: sample.name + ".svg",
+        name: sample.name,
         artScale: 90,
         artX: 0,
         artY: 0,
         rotation: 0,
         mirror: false,
-      });
-      setBottom(false);
-      setTab("artwork");
-      notify("Image added. Your colors are being matched locally.");
-    } catch (e) {
-      notify((e as Error).message);
-    }
-  };
-  const importProject = async (file?: File) => {
-    if (!file) return;
-    try {
-      if (file.size > 30e6)
-        throw new Error("Project files must be under 30 MB.");
-      const next = parseProject(JSON.parse(await file.text()));
-      restorePalette.current = true;
-      autoPalette.current = false;
-      change(next);
-      setRecolor((v) => v + 1);
-      setZoom(1);
-      notify("Project opened. All colors and settings restored.");
-    } catch (e) {
-      notify((e as Error).message);
-    }
-  };
-  const chooseSample = (id: string) => {
-    const sample = SAMPLES.find((x) => x.id === id)!;
-    autoPalette.current = true;
-    restorePalette.current = false;
-    change({
-      source: "",
-      sample: id,
-      matchBase: p.colors[0],
-      sourceName: sample.name + ".svg",
-      name: sample.name,
-      artScale: 90,
-      artX: 0,
-      artY: 0,
-      rotation: 0,
-      mirror: false,
-      removeBackground: false,
-    });
-    setBottom(false);
-  };
-  const align = (a: Alignment) => {
-    if (art) {
-      change(alignArtwork(a, p, art));
-      setView("2d");
-      setBottom(false);
-    }
-  };
-  const saveProject = () => {
-    download(
-      JSON.stringify(p, null, 2),
-      filename(p) + ".coaster.json",
-      "application/json",
+        removeBackground: false,
+        matchBase: p.colors[0],
+      },
+      true,
     );
-    notify("Editable project saved, including your original artwork.");
-  };
-  const canExport =
-    !!model && !building && !processing && !issues.length && !error;
-  const exportFile = async (type: "3mf" | "svg" | "stl", launch = false) => {
-    if (!canExport || !model || !art) return;
+    setBottom(false);
+  }
+  function fitImage() {
+    if (!art) return;
+    const points = art.loops.flatMap((loops, i) =>
+      (p.mapping[i] ?? i) === 0 ? [] : loops.flat(),
+    );
+    if (!points.length) return;
+    let minX = Infinity,
+      maxX = -Infinity,
+      minY = Infinity,
+      maxY = -Infinity;
+    for (const [x, y] of points) {
+      minX = Math.min(minX, x);
+      maxX = Math.max(maxX, x);
+      minY = Math.min(minY, y);
+      maxY = Math.max(maxY, y);
+    }
+    const cx = (minX + maxX) / 2,
+      cy = (minY + maxY) / 2;
+    let radius = 0;
+    for (const [x, y] of points)
+      radius = Math.max(
+        radius,
+        p.shape === "rounded"
+          ? Math.max(Math.abs(x - cx), Math.abs(y - cy))
+          : Math.hypot(x - cx, y - cy),
+      );
+    const space =
+      (p.diameter / 2 - p.margin) *
+      (p.shape === "hexagon"
+        ? Math.cos(Math.PI / 6)
+        : p.shape === "rounded"
+          ? 0.94
+          : 1);
+    const next = {
+      ...p,
+      rotation: 0,
+      artScale: Math.max(
+        5,
+        Math.min(
+          180,
+          (((space / (radius || 1)) * Math.max(art.width, art.height)) /
+            p.diameter) *
+            100,
+        ),
+      ),
+    };
+    change({
+      artScale: next.artScale,
+      rotation: 0,
+      ...alignArtwork("center", next, art),
+    });
+    setView("2d");
+    setBottom(false);
+  }
+  async function exportFile(type: "3mf" | "svg" | "stl", launch = false) {
+    if (!canExport || !art || !model || exporting) return;
     setExporting(true);
     try {
-      await new Promise((r) => setTimeout(r, 20));
+      await new Promise((resolve) => setTimeout(resolve, 20));
       if (type === "3mf")
         download(export3mf(p, model), filename(p) + ".3mf", "model/3mf");
       else if (type === "svg")
@@ -392,1118 +282,877 @@ export default function App() {
       else download(exportStl(model), filename(p) + ".stl", "model/stl");
       if (launch) {
         setBambuReady(true);
-        const a = document.createElement("a");
-        a.href = "bambustudio://";
-        a.click();
+        const link = document.createElement("a");
+        link.href = "bambustudio://";
+        link.click();
       } else
         notify(
-          `${type.toUpperCase()} downloaded${type === "3mf" ? " with your filament colors." : "."}`,
+          type.toUpperCase() +
+            " downloaded" +
+            (type === "3mf" ? " with filament colors." : "."),
         );
     } catch (e) {
-      notify("Export failed. " + (e as Error).message);
+      notify("Export failed: " + (e as Error).message);
     } finally {
       setExporting(false);
     }
-  };
-  const totalWeight = model ? (model.volume / 1000) * 1.24 : 0;
+  }
   const usedColors = model
-    ? new Set(model.parts.map((x) => p.colors[x.colorIndex].toUpperCase())).size
+    ? new Set(
+        model.parts.map((part) => p.colors[part.colorIndex] ?? p.colors[0]),
+      ).size
     : p.colorCount;
   const status = error
-    ? "Needs attention"
+    ? "Could not update model"
     : issues.length
       ? "Check dimensions"
       : processing
-        ? "Matching colors"
+        ? "Matching image colors…"
         : building
-          ? "Updating model"
+          ? "Updating model…"
           : "Ready to make";
+
   return (
-    <div className="app-shell">
-      <header className="site-header">
-        <a className="brand" href="/" aria-label="CoasterGen home">
-          <span className="brand-mark">
-            <Layers3 size={24} strokeWidth={1.65} />
-          </span>
-          Coaster<span>Gen</span>
-          <span className="studio-label">STUDIO</span>
-        </a>
-        <nav>
-          <button className="nav-active" onClick={() => setDialog(null)}>
-            Create
-          </button>
-          <button onClick={() => setDialog("help")}>
-            How it works <ArrowUpRight size={13} />
-          </button>
-        </nav>
-        <div className="header-end">
-          <span className="private-pill">
-            <span />
-            100% on-device
-          </span>
-          <a
-            className="icon-button github-link"
-            href="https://github.com/Tekwiz17/CoasterGen"
-            target="_blank"
-            rel="noreferrer"
-            aria-label="Source on GitHub"
-          >
-            <Code2 size={19} />
+    <>
+      <div className="app-shell" inert={modalOpen}>
+        <header className="site-header">
+          <a className="brand" href="/" aria-label="CoasterGen home">
+            <span className="brand-mark">
+              <Layers3 size={23} />
+            </span>
+            CoasterGen
           </a>
-          <button
-            className="help-button icon-button"
-            onClick={() => setDialog("help")}
-            aria-label="Help"
-          >
-            <CircleHelp size={19} />
-          </button>
-        </div>
-      </header>
-      <main>
-        <div className="workspace-heading">
-          <div>
-            <div className="eyebrow">
-              <span />
-              YOUR NEXT FAVORITE COASTER
+          <span className="header-caption">
+            Custom coasters for 3D printing
+          </span>
+          <div className="header-links">
+            <button
+              className="header-link"
+              onClick={() => setDialog("tutorial")}
+            >
+              <CircleHelp size={17} />
+              <span>Tutorial</span>
+            </button>
+            <a
+              className="header-link github-link"
+              href="https://github.com/Tekwiz17/CoasterGen"
+              target="_blank"
+              rel="noreferrer"
+            >
+              <GitHubLogo />
+              <span>Source code</span>
+              <ArrowUpRight size={13} />
+            </a>
+          </div>
+        </header>
+        <main>
+          <div className="workspace-heading">
+            <div>
+              <h1>Create a coaster</h1>
+              <p>Set the size, add an image and choose your filament colors.</p>
             </div>
-            <h1>
-              Make it <em>yours.</em>
-            </h1>
-            <p>
-              A little artwork. A few colors. Something worth putting your
-              coffee on.
-            </p>
-          </div>
-          <div className="project-actions">
-            <button
-              className="button light"
-              onClick={() => projectInput.current?.click()}
-            >
-              <FolderOpen size={16} />
-              <span>Open project</span>
-            </button>
-            <button className="button light" onClick={saveProject}>
-              <Save size={16} />
-              <span>Save project</span>
-            </button>
-            <button
-              className="button primary export-top"
-              onClick={() => setDialog("export")}
-              disabled={!canExport}
-            >
-              <Download size={17} />
-              <span>Export coaster</span>
-              <ChevronDown size={14} />
-            </button>
-          </div>
-        </div>
-        <div className="editor-layout">
-          <aside className="settings-panel panel">
-            <div className="panel-title">
-              <SlidersHorizontal size={17} />
-              <span>Make it your own</span>
-              <button className="text-button" onClick={() => setDialog("new")}>
-                Reset
+            <div className="project-actions">
+              <button
+                className="button light small"
+                aria-label="Open project"
+                onClick={() => projectInput.current?.click()}
+              >
+                <FolderOpen size={16} />
+                <span>Open project</span>
+              </button>
+              <button
+                className="button light small"
+                aria-label="Save project"
+                onClick={saveProject}
+              >
+                <Save size={16} />
+                <span>Save project</span>
               </button>
             </div>
-            <div
-              className="settings-tabs"
-              role="tablist"
-              aria-label="Coaster settings"
-            >
-              {(
-                [
-                  { id: "coaster", name: "Coaster", icon: Ruler },
-                  { id: "artwork", name: "Artwork", icon: ImagePlus },
-                  { id: "magnets", name: "Magnets", icon: Magnet },
-                ] as const
-              ).map((t) => (
-                <button
-                  key={t.id}
-                  role="tab"
-                  aria-selected={tab === t.id}
-                  onClick={() => setTab(t.id)}
-                >
-                  <t.icon size={16} />
-                  {t.name}
-                  {t.id === "magnets" && p.magnetMode !== "none" && <i />}
-                </button>
-              ))}
-            </div>
-            <div className="settings-body">
-              {tab === "coaster" && (
-                <>
-                  <Section
-                    number="01"
-                    title="The foundation"
-                    icon={<Ruler size={17} />}
-                  >
-                    <label className="field">
-                      <span>Coaster shape</span>
-                    </label>
-                    <div className="shape-picker">
-                      {(
-                        [
-                          { id: "circle", label: "Round", icon: Circle },
-                          { id: "rounded", label: "Soft square", icon: Square },
-                          { id: "hexagon", label: "Hexagon", icon: Hexagon },
-                        ] as const
-                      ).map((s) => (
-                        <button
-                          key={s.id}
-                          className={p.shape === s.id ? "selected" : ""}
-                          onClick={() => change({ shape: s.id })}
-                          aria-pressed={p.shape === s.id}
-                        >
-                          <s.icon size={25} strokeWidth={1.4} />
-                          <span>{s.label}</span>
-                        </button>
-                      ))}
-                    </div>
-                    <div className="field-grid">
-                      <Field
-                        label={p.shape === "circle" ? "Diameter" : "Width"}
-                        value={p.diameter}
-                        min={30}
-                        max={250}
-                        onChange={(diameter) => change({ diameter })}
-                      />
-                      <Field
-                        label="Total thickness"
-                        value={p.thickness}
-                        min={1.2}
-                        max={20}
-                        step={0.2}
-                        onChange={(thickness) => change({ thickness })}
-                      />
-                    </div>
-                    <div className="size-presets">
-                      <span>Quick size</span>
-                      {[85, 100, 110].map((n) => (
-                        <button
-                          key={n}
-                          className={p.diameter === n ? "active" : ""}
-                          onClick={() => change({ diameter: n })}
-                        >
-                          {n} mm
-                        </button>
-                      ))}
-                    </div>
-                    <Slider
-                      label="Clear border"
-                      value={p.margin}
-                      min={0}
-                      max={12}
-                      step={0.5}
-                      unit=" mm"
-                      onChange={(margin) => change({ margin })}
-                    />
-                    <p className="control-note">
-                      Artwork stays inside this border, even when you move or
-                      resize it.
-                    </p>
-                  </Section>
-                  <Section
-                    number="02"
-                    title="Print details"
-                    icon={<Layers3 size={17} />}
-                  >
-                    <Field
-                      label="Color layer depth"
-                      value={p.inlayDepth}
-                      min={0.2}
-                      max={3}
-                      step={0.2}
-                      onChange={(inlayDepth) => change({ inlayDepth })}
-                    />
-                    <div className="soft-note">
-                      <Layers3 size={17} />
-                      <p>
-                        <strong>A smooth, flush surface.</strong>Your colors are
-                        inlaid into the top {p.inlayDepth} mm. Total height
-                        stays {p.thickness} mm.
-                      </p>
-                    </div>
-                    <label className="field">
-                      <span>Artwork detail</span>
-                      <select
-                        aria-label="Artwork detail"
-                        value={p.detail}
-                        onChange={(e) =>
-                          change({ detail: Number(e.target.value) })
-                        }
-                      >
-                        <option value={192}>Quick · 192 px</option>
-                        <option value={320}>Balanced · 320 px</option>
-                        <option value={512}>Fine · 512 px</option>
-                      </select>
-                    </label>
-                    <p className="control-note">
-                      Fine captures more detail and takes longer to process.
-                      Very small features may need a smaller nozzle.
-                    </p>
-                  </Section>
-                  <div className="next-step">
-                    <div>
-                      <ImagePlus size={18} />
-                      <span>Now give it some personality.</span>
-                    </div>
-                    <button
-                      onClick={() => setTab("artwork")}
-                      aria-label="Customize artwork"
-                    >
-                      <ArrowRight size={18} />
-                    </button>
-                  </div>
-                </>
-              )}
-              {tab === "artwork" && (
-                <>
-                  <Section
-                    number="01"
-                    title="Your artwork"
-                    icon={<FileImage size={17} />}
-                  >
-                    <button
-                      className="upload-zone"
-                      onClick={() => fileInput.current?.click()}
-                    >
-                      <span className="upload-icon">
-                        <Upload size={22} />
-                      </span>
-                      <strong>Drop in something you love</strong>
-                      <span>
-                        or <u>browse files</u>
-                      </span>
-                      <small>PNG, JPG, WebP, SVG · up to 20 MB</small>
-                    </button>
-                    <div className="file-chip">
-                      <FileImage size={17} />
-                      <span title={p.sourceName}>{p.sourceName}</span>
-                      <button
-                        className="icon-button"
-                        onClick={() => fileInput.current?.click()}
-                        aria-label="Replace artwork"
-                      >
-                        <RotateCcw size={14} />
-                      </button>
-                    </div>
-                    <Toggle
-                      label="Remove background"
-                      description="Removes a connected, similar-colored background from the image edges."
-                      checked={p.removeBackground}
-                      onChange={() => {
-                        autoPalette.current = true;
-                        change({
-                          removeBackground: !p.removeBackground,
-                          matchBase: p.colors[0],
-                        });
-                      }}
-                    />
-                  </Section>
-                  <Section
-                    number="02"
-                    title="Just the right fit"
-                    icon={<Move size={17} />}
-                  >
-                    <Slider
-                      label="Artwork size"
-                      value={p.artScale}
-                      min={5}
-                      max={180}
-                      unit="%"
-                      onChange={(artScale) => change({ artScale })}
-                      reset={() => change({ artScale: 90 })}
-                    />
-                    <div className="fit-actions">
-                      <button
-                        className="button light small"
-                        onClick={() => {
-                          align("center");
-                          notify("Artwork centered.");
-                        }}
-                      >
-                        <Crosshair size={15} />
-                        Center
-                      </button>
-                      <button
-                        className="button light small"
-                        onClick={() =>
-                          change({
-                            artScale:
-                              ((p.diameter - p.margin * 2) / p.diameter) * 100,
-                            artX: 0,
-                            artY: 0,
-                            rotation: 0,
-                          })
-                        }
-                      >
-                        <Maximize size={14} />
-                        Fit to coaster
-                      </button>
-                    </div>
-                    <Slider
-                      label="Rotation"
-                      value={p.rotation}
-                      min={-180}
-                      max={180}
-                      unit="°"
-                      onChange={(rotation) => change({ rotation })}
-                      reset={() => change({ rotation: 0 })}
-                    />
-                    <div className="field-grid">
-                      <Field
-                        label="Position X"
-                        value={p.artX}
-                        min={-p.diameter}
-                        max={p.diameter}
-                        step={0.5}
-                        onChange={(artX) => change({ artX })}
-                      />
-                      <Field
-                        label="Position Y"
-                        value={p.artY}
-                        min={-p.diameter}
-                        max={p.diameter}
-                        step={0.5}
-                        onChange={(artY) => change({ artY })}
-                      />
-                    </div>
-                    <div className="alignment-heading">
-                      <span>Align to coaster</span>
-                      <span>visible artwork</span>
-                    </div>
-                    <div className="alignment-tools">
-                      {(
-                        [
-                          {
-                            id: "left",
-                            label: "Align left",
-                            icon: AlignHorizontalJustifyStart,
-                          },
-                          {
-                            id: "centerX",
-                            label: "Center horizontally",
-                            icon: AlignHorizontalJustifyCenter,
-                          },
-                          {
-                            id: "right",
-                            label: "Align right",
-                            icon: AlignHorizontalJustifyEnd,
-                          },
-                          {
-                            id: "top",
-                            label: "Align top",
-                            icon: AlignVerticalJustifyStart,
-                          },
-                          {
-                            id: "centerY",
-                            label: "Center vertically",
-                            icon: AlignVerticalJustifyCenter,
-                          },
-                          {
-                            id: "bottom",
-                            label: "Align bottom",
-                            icon: AlignVerticalJustifyEnd,
-                          },
-                        ] as const
-                      ).map((a) => (
-                        <button
-                          key={a.id}
-                          aria-label={a.label}
-                          title={a.label}
-                          onClick={() => align(a.id)}
-                          disabled={!art}
-                        >
-                          <a.icon size={17} />
-                        </button>
-                      ))}
-                    </div>
-                    <Toggle
-                      label="Snap to center & border"
-                      description="Smart guides appear as you drag. Hold Alt/Option to move freely."
-                      checked={p.snapEnabled}
-                      onChange={() => change({ snapEnabled: !p.snapEnabled })}
-                    />
-                    <Toggle
-                      label="Show center lines"
-                      checked={p.showGuides}
-                      onChange={() => change({ showGuides: !p.showGuides })}
-                    />
-                    <Toggle
-                      label="Mirror artwork"
-                      checked={p.mirror}
-                      onChange={() => change({ mirror: !p.mirror })}
-                    />
-                    <button
-                      className="inline-link"
-                      onClick={() => {
-                        setView("2d");
-                        setBottom(false);
-                        notify(
-                          "Drag the artwork on the coaster to position it.",
-                        );
-                      }}
-                    >
-                      <MousePointer2 size={14} />
-                      Position directly in 2D
-                      <ArrowUpRight size={13} />
-                    </button>
-                  </Section>
-                </>
-              )}
-              {tab === "magnets" && (
-                <>
-                  <Section
-                    number="01"
-                    title="A little attraction"
-                    icon={<Magnet size={17} />}
-                  >
-                    <p className="section-description">
-                      Add open pockets on the underside for glue-in disc
-                      magnets.
-                    </p>
-                    <div className="magnet-options">
-                      {(
-                        [
-                          {
-                            id: "none",
-                            name: "No magnets",
-                            text: "Keep things simple",
-                          },
-                          {
-                            id: "center",
-                            name: "Center magnet",
-                            text: "One pocket, right in the middle",
-                          },
-                          {
-                            id: "outer",
-                            name: "Outer magnets",
-                            text: "Evenly spaced near the edge",
-                          },
-                        ] as const
-                      ).map((m) => (
-                        <button
-                          className={p.magnetMode === m.id ? "selected" : ""}
-                          key={m.id}
-                          onClick={() => {
-                            change({ magnetMode: m.id });
-                            setBottom(m.id !== "none");
-                          }}
-                        >
-                          <span className={`magnet-diagram ${m.id}`}>
-                            <i />
-                            {m.id === "outer" && (
-                              <>
-                                <i />
-                                <i />
-                                <i />
-                              </>
-                            )}
-                          </span>
-                          <span>
-                            <strong>{m.name}</strong>
-                            <small>{m.text}</small>
-                          </span>
-                          <span className="radio-dot" />
-                        </button>
-                      ))}
-                    </div>
-                  </Section>
-                  {p.magnetMode !== "none" && (
-                    <Section
-                      number="02"
-                      title="Pocket dimensions"
-                      icon={<Ruler size={17} />}
-                    >
-                      <div className="field-grid">
-                        <Field
-                          label="Magnet diameter"
-                          value={p.magnetDiameter}
-                          min={1}
-                          max={50}
-                          step={0.5}
-                          onChange={(magnetDiameter) =>
-                            change({ magnetDiameter })
-                          }
-                        />
-                        <Field
-                          label="Magnet thickness"
-                          value={p.magnetDepth}
-                          min={0.5}
-                          max={10}
-                          step={0.5}
-                          onChange={(magnetDepth) => change({ magnetDepth })}
-                        />
-                      </div>
-                      {p.magnetMode === "outer" && (
-                        <>
-                          <label className="field">
-                            <span>Number of magnets</span>
-                            <select
-                              aria-label="Number of magnets"
-                              value={p.magnetCount}
-                              onChange={(e) =>
-                                change({ magnetCount: Number(e.target.value) })
-                              }
-                            >
-                              {[2, 3, 4, 6, 8].map((n) => (
-                                <option key={n} value={n}>
-                                  {n} magnets
-                                </option>
-                              ))}
-                            </select>
-                          </label>
-                          <Field
-                            label="Gap from edge"
-                            value={p.edgeGap}
-                            min={0.8}
-                            max={p.diameter / 2}
-                            step={0.5}
-                            onChange={(edgeGap) => change({ edgeGap })}
-                            hint="From the pocket wall to the nearest coaster edge."
-                          />
-                        </>
-                      )}
-                      <Field
-                        label="Diameter clearance"
-                        value={p.clearance}
-                        min={0}
-                        max={1}
-                        step={0.05}
-                        onChange={(clearance) => change({ clearance })}
-                        hint="Added to the magnet diameter for an easier fit."
-                      />
-                      <div className="soft-note">
-                        <Magnet size={17} />
-                        <p>
-                          <strong>
-                            Pocket: Ø
-                            {Number(
-                              (p.magnetDiameter + p.clearance).toFixed(2),
-                            )}{" "}
-                            × {Number((p.magnetDepth + 0.1).toFixed(2))} mm
-                          </strong>
-                          Includes 0.1 mm of depth clearance. Test fit before
-                          gluing.
-                        </p>
-                      </div>
-                      <button
-                        className="inline-link"
-                        onClick={() => {
-                          setBottom(true);
-                          setView("2d");
-                        }}
-                      >
-                        Inspect underside
-                        <ArrowUpRight size={13} />
-                      </button>
-                    </Section>
-                  )}
-                  {p.magnetMode === "none" && (
-                    <div className="quiet-card">
-                      <ShieldCheck size={23} />
-                      <p>
-                        A clean, solid base. You can always add magnets later.
-                      </p>
-                    </div>
-                  )}
-                </>
-              )}
-            </div>
-            <div className="panel-footer">
-              <LockKeyhole size={13} />
-              <span>Your files never leave your device.</span>
-            </div>
-          </aside>
-          <section className="canvas-column">
-            <div
-              className={`preview-panel ${dragging ? "drop-active" : ""}`}
-              onDragOver={(e) => {
-                e.preventDefault();
-                setDragging(true);
-              }}
-              onDragLeave={(e) => {
-                if (!e.currentTarget.contains(e.relatedTarget as Node))
+          </div>
+          <div className="editor-grid">
+            <section className="canvas-column">
+              <div
+                className={
+                  "preview-panel panel" + (dragging ? " drop-active" : "")
+                }
+                onDragOver={(e) => {
+                  e.preventDefault();
+                  setDragging(true);
+                }}
+                onDragLeave={(e) => {
+                  if (!e.currentTarget.contains(e.relatedTarget as Node))
+                    setDragging(false);
+                }}
+                onDrop={(e) => {
+                  e.preventDefault();
                   setDragging(false);
-              }}
-              onDrop={(e) => {
-                e.preventDefault();
-                setDragging(false);
-                upload(e.dataTransfer.files[0]);
-              }}
-            >
-              <div className="preview-topbar">
-                <div className="project-name">
-                  <span className="project-dot" />
-                  <input
-                    aria-label="Project name"
-                    value={p.name}
-                    onChange={(e) =>
-                      change({ name: e.target.value.slice(0, 80) })
-                    }
-                  />
-                  <span className="draft-tag">DRAFT</span>
-                </div>
-                <div className="history-buttons">
-                  <button
-                    className="icon-button"
-                    onClick={undo}
-                    disabled={!history.current.length}
-                    aria-label="Undo"
-                    title="Undo (⌘Z)"
-                  >
-                    <Undo2 size={17} />
-                  </button>
-                  <button
-                    className="icon-button"
-                    onClick={redo}
-                    disabled={!future.current.length}
-                    aria-label="Redo"
-                    title="Redo (⌘⇧Z)"
-                  >
-                    <Redo2 size={17} />
-                  </button>
-                </div>
-              </div>
-              <div className="viewport">
-                <div className="viewport-controls">
-                  <div className="segmented" aria-label="Preview mode">
+                  upload(e.dataTransfer.files[0]);
+                }}
+              >
+                <div className="preview-topbar">
+                  <div className="project-name">
+                    <input
+                      aria-label="Project name"
+                      value={p.name}
+                      onChange={(e) =>
+                        change({ name: e.target.value.slice(0, 80) })
+                      }
+                    />
+                    <span>Click to rename</span>
+                  </div>
+                  <div className="history-buttons">
                     <button
-                      className={view === "3d" ? "active" : ""}
-                      onClick={() => setView("3d")}
+                      className="icon-button"
+                      aria-label="Undo"
+                      title="Undo (Ctrl/⌘ Z)"
+                      disabled={!editor.canUndo}
+                      onClick={editor.undo}
                     >
-                      <Box size={14} />
-                      3D view
+                      <Undo2 size={17} />
                     </button>
                     <button
-                      className={view === "2d" ? "active" : ""}
-                      onClick={() => setView("2d")}
+                      className="icon-button"
+                      aria-label="Redo"
+                      title="Redo (Ctrl/⌘ Shift Z)"
+                      disabled={!editor.canRedo}
+                      onClick={editor.redo}
                     >
-                      <Square size={13} />
-                      2D edit
+                      <Redo2 size={17} />
                     </button>
                   </div>
-                  <button
-                    className={`button light small flip-button ${bottom ? "is-bottom" : ""}`}
-                    onClick={() => setBottom(!bottom)}
-                  >
-                    <FlipHorizontal2 size={14} />
-                    {bottom ? "Underside" : "Flip coaster"}
-                  </button>
                 </div>
-                {view === "3d" ? (
-                  <Suspense
-                    fallback={
-                      <div className="initial-loading">
-                        <LoaderCircle className="spin" />
-                        Opening 3D preview
-                      </div>
-                    }
-                  >
-                    <ModelViewer
-                      model={model}
+                <div className="viewport">
+                  <div className="viewport-controls">
+                    <div className="segmented" aria-label="Preview mode">
+                      <button
+                        className={view === "2d" ? "active" : ""}
+                        aria-pressed={view === "2d"}
+                        onClick={() => setView("2d")}
+                      >
+                        <Square size={14} />
+                        Top / edit
+                      </button>
+                      <button
+                        className={view === "3d" ? "active" : ""}
+                        aria-pressed={view === "3d"}
+                        onClick={() => setView("3d")}
+                      >
+                        <Box size={15} />
+                        3D view
+                      </button>
+                    </div>
+                    <button
+                      className={
+                        "button light small flip-button" +
+                        (bottom ? " active" : "")
+                      }
+                      onClick={() => setBottom((v) => !v)}
+                    >
+                      <FlipHorizontal2 size={15} />
+                      {bottom ? "Show top" : "Underside"}
+                    </button>
+                  </div>
+                  {view === "2d" ? (
+                    <FlatPreview
                       project={p}
+                      artwork={art}
                       bottom={bottom}
                       zoom={zoom}
-                      reset={reset}
-                      onFailure={() => {
-                        setView("2d");
-                        notify(
-                          "Using the 2D preview because WebGL is unavailable. All exports still work.",
-                        );
+                      onMove={editor.move}
+                      onDragStart={() => {
+                        dragStart.current = p;
+                      }}
+                      onDragEnd={() => {
+                        if (dragStart.current) {
+                          editor.checkpoint(dragStart.current);
+                          dragStart.current = null;
+                        }
                       }}
                     />
-                  </Suspense>
-                ) : (
-                  <FlatPreview
-                    project={p}
-                    artwork={art}
-                    bottom={bottom}
-                    zoom={zoom}
-                    onMove={(artX, artY) =>
-                      setP((prev) => ({ ...prev, artX, artY }))
-                    }
-                    onDragStart={() => {
-                      dragStartProject.current = p;
-                    }}
-                    onDragEnd={() => {
-                      if (dragStartProject.current) {
-                        history.current.push(dragStartProject.current);
-                        future.current = [];
-                        dragStartProject.current = null;
-                        setHistoryTick((v) => v + 1);
-                      }
-                    }}
-                  />
-                )}
-                {!model &&
-                  view === "3d" &&
-                  (processing || building) &&
-                  !issues.length &&
-                  !error && (
-                    <div className="initial-loading">
-                      <span className="loading-emblem">
-                        <Layers3 size={30} />
-                      </span>
-                      <strong>Making a little something.</strong>
-                      <span>Everything is happening on your device.</span>
-                      <LoaderCircle size={18} className="spin" />
-                    </div>
-                  )}
-                {bottom && p.magnetMode === "none" && (
-                  <div className="view-caption">
-                    A clean underside. Add pockets in Magnets.
-                  </div>
-                )}
-                <div className="dimension-guide">
-                  <span />
-                  {p.shape === "circle" ? "Ø " : ""}
-                  {p.diameter} mm
-                  <span />
-                </div>
-                <div className="preview-bottom-tools">
-                  <span className="orbit-hint">
-                    <MousePointer2 size={13} />
-                    {view === "3d"
-                      ? "Drag to orbit · scroll to zoom"
-                      : bottom
-                        ? "Underside · pocket view"
-                        : p.snapEnabled
-                          ? "Drag to position · Alt to unsnap"
-                          : "Drag artwork to position"}
-                  </span>
-                  <div className="zoom-tools">
-                    <button
-                      aria-label="Zoom out"
-                      onClick={() => setZoom((v) => Math.max(0.55, v - 0.15))}
-                    >
-                      <Minus size={15} />
-                    </button>
-                    <span>{Math.round(zoom * 100)}%</span>
-                    <button
-                      aria-label="Zoom in"
-                      onClick={() => setZoom((v) => Math.min(1.9, v + 0.15))}
-                    >
-                      <Plus size={15} />
-                    </button>
-                    <i />
-                    <button
-                      aria-label="Reset camera"
-                      onClick={() => {
-                        setZoom(1);
-                        setReset((v) => v + 1);
-                      }}
-                      title="Fit view (F)"
-                    >
-                      <Maximize size={14} />
-                    </button>
-                  </div>
-                </div>
-              </div>
-              <div className="preview-status">
-                <span
-                  className={
-                    issues.length || error ? "status caution" : "status"
-                  }
-                >
-                  {processing || building ? (
-                    <LoaderCircle size={13} className="spin" />
-                  ) : issues.length || error ? (
-                    <CircleHelp size={13} />
                   ) : (
-                    <CheckCheck size={14} />
+                    <Suspense
+                      fallback={
+                        <div className="preview-loading">
+                          <LoaderCircle className="spin" />
+                          Loading 3D…
+                        </div>
+                      }
+                    >
+                      <ModelViewer
+                        model={model}
+                        project={p}
+                        bottom={bottom}
+                        zoom={zoom}
+                        reset={reset}
+                        onFailure={() => {
+                          setView("2d");
+                          notify(
+                            "3D is unavailable in this browser. The top view and all downloads still work.",
+                          );
+                        }}
+                      />
+                    </Suspense>
                   )}
-                  <span data-testid="model-status">{status}</span>
-                </span>
-                <span className="local-saved">
-                  <span />
-                  {saved}
-                </span>
+                  {((processing && !art) || (building && view === "3d")) &&
+                    !issues.length &&
+                    !error && (
+                      <div className="busy-label" role="status">
+                        <LoaderCircle size={15} className="spin" />
+                        {status}
+                      </div>
+                    )}
+                  <div className="dimension-guide">
+                    <span />
+                    {p.diameter} mm
+                    <span />
+                  </div>
+                  <div className="preview-bottom-tools">
+                    <span className="orbit-hint">
+                      {bottom
+                        ? "Magnet pockets open on this side"
+                        : view === "3d"
+                          ? "Drag to rotate · scroll to zoom"
+                          : "Drag image to move · snaps to center"}
+                    </span>
+                    <div className="zoom-tools">
+                      <button
+                        aria-label="Zoom out"
+                        onClick={() => setZoom((v) => Math.max(0.55, v - 0.15))}
+                      >
+                        <Minus size={15} />
+                      </button>
+                      <span>{Math.round(zoom * 100)}%</span>
+                      <button
+                        aria-label="Zoom in"
+                        onClick={() => setZoom((v) => Math.min(1.9, v + 0.15))}
+                      >
+                        <Plus size={15} />
+                      </button>
+                      <button
+                        aria-label="Reset camera"
+                        title="Fit view (F)"
+                        onClick={() => {
+                          setZoom(1);
+                          setReset((v) => v + 1);
+                        }}
+                      >
+                        <Maximize size={15} />
+                      </button>
+                    </div>
+                  </div>
+                </div>
+                <div className="preview-status">
+                  <span
+                    className={
+                      error || issues.length ? "status caution" : "status"
+                    }
+                  >
+                    {processing || building ? (
+                      <LoaderCircle size={14} className="spin" />
+                    ) : error || issues.length ? (
+                      <CircleHelp size={14} />
+                    ) : (
+                      <Check size={15} />
+                    )}
+                    <span data-testid="model-status">{status}</span>
+                  </span>
+                  <span className="local-saved">{editor.saved}</span>
+                </div>
+                {dragging && (
+                  <div className="drop-overlay">
+                    <ImagePlus size={36} />
+                    <strong>Drop an image here</strong>
+                    <span>PNG, JPG, WebP or SVG</span>
+                  </div>
+                )}
               </div>
-              {dragging && (
-                <div className="drop-overlay">
-                  <ImagePlus size={42} />
-                  <strong>Make this one yours.</strong>
-                  <span>Drop your artwork to get started.</span>
+              {(issues.length > 0 || error) && (
+                <div role="alert" className="validation-message">
+                  <CircleHelp size={19} />
+                  <div>
+                    {[...issues, ...(error ? [error] : [])].map((text) => (
+                      <p key={text}>{text}</p>
+                    ))}
+                  </div>
                 </div>
               )}
-            </div>
-            {(issues.length > 0 || error) && (
-              <div role="alert" className="validation-message">
-                <CircleHelp size={18} />
-                <div>
-                  <strong>One quick adjustment</strong>
-                  {[...issues, ...(error ? [error] : [])].map((e, i) => (
-                    <p key={i}>{e}</p>
+              <div className="download-panel panel">
+                <div className="download-heading">
+                  <span className="step-label">4</span>
+                  <div>
+                    <h2>Ready to print?</h2>
+                    <p>
+                      {p.diameter} × {p.thickness} mm <span>·</span>{" "}
+                      {usedColors} colors <span>·</span>{" "}
+                      {magnetCenters(p).length} magnet pockets
+                    </p>
+                  </div>
+                  <button
+                    className="icon-button"
+                    aria-label="More export formats"
+                    title="SVG, STL and project files"
+                    onClick={() => setDialog("export")}
+                  >
+                    <ChevronDown size={19} />
+                  </button>
+                </div>
+                <div className="download-actions">
+                  <button
+                    className="button primary"
+                    disabled={!canExport || exporting}
+                    onClick={() => exportFile("3mf")}
+                  >
+                    <Download size={18} />
+                    {exporting ? "Preparing…" : "Download 3MF"}
+                  </button>
+                  <button
+                    className="button light bambu"
+                    disabled={!canExport || exporting}
+                    onClick={() => {
+                      setBambuReady(false);
+                      setDialog("bambu");
+                    }}
+                  >
+                    <BambuLogo />
+                    Bambu Studio
+                    <ArrowUpRight size={14} />
+                  </button>
+                </div>
+                <p className="control-note">
+                  3MF includes your colors and magnet pockets. Select your
+                  printer and filament slots in your slicer.
+                </p>
+              </div>
+              <div className="sample-section">
+                <div className="sample-heading">
+                  <h2>Try an example</h2>
+                  <span>Or upload your own in Image & colors</span>
+                </div>
+                <div className="sample-grid">
+                  {SAMPLES.map((sample) => (
+                    <button
+                      key={sample.id}
+                      className={
+                        "sample-card" +
+                        (!p.source && p.sample === sample.id ? " selected" : "")
+                      }
+                      onClick={() => chooseSample(sample.id)}
+                    >
+                      <span className="sample-preview">
+                        <img src={svgDataUrl(sample.svg)} alt="" />
+                      </span>
+                      <span>{sample.name}</span>
+                      {!p.source && p.sample === sample.id && (
+                        <Check size={13} />
+                      )}
+                    </button>
                   ))}
                 </div>
               </div>
-            )}
-            <div className="inspiration">
-              <div className="inspiration-heading">
-                <div>
-                  <Sparkles size={16} />
-                  <h2>Start with a little inspiration</h2>
-                </div>
-                <span>Made to make your own</span>
-              </div>
-              <div className="sample-grid">
-                {SAMPLES.map((s) => (
+            </section>
+            <aside className="settings-panel panel">
+              <div
+                className="settings-tabs"
+                role="tablist"
+                aria-label="Coaster settings"
+              >
+                {[
+                  { id: "coaster", label: "Size", n: 1 },
+                  { id: "artwork", label: "Image & colors", n: 2 },
+                  { id: "magnets", label: "Magnets", n: 3 },
+                ].map((item) => (
                   <button
-                    key={s.id}
-                    className={`sample-card ${!p.source && p.sample === s.id ? "selected" : ""}`}
-                    onClick={() => chooseSample(s.id)}
+                    key={item.id}
+                    role="tab"
+                    aria-label={item.label}
+                    id={"tab-" + item.id}
+                    aria-controls="settings-content"
+                    aria-selected={tab === item.id}
+                    tabIndex={tab === item.id ? 0 : -1}
+                    onKeyDown={(e) => {
+                      const ids: Tab[] = ["coaster", "artwork", "magnets"];
+                      if (
+                        ["ArrowLeft", "ArrowRight", "Home", "End"].includes(
+                          e.key,
+                        )
+                      ) {
+                        e.preventDefault();
+                        const index =
+                          e.key === "Home"
+                            ? 0
+                            : e.key === "End"
+                              ? 2
+                              : (ids.indexOf(tab) +
+                                  (e.key === "ArrowRight" ? 1 : 2)) %
+                                3;
+                        setTab(ids[index]);
+                        document.getElementById("tab-" + ids[index])?.focus();
+                      }
+                    }}
+                    onClick={() => setTab(item.id as Tab)}
                   >
-                    <span className="sample-preview">
-                      <img src={svgDataUrl(s.svg)} alt="" />
-                    </span>
-                    <span>{s.name}</span>
-                    {!p.source && p.sample === s.id ? (
-                      <span className="sample-check">
-                        <Check size={10} />
-                      </span>
-                    ) : (
-                      <ArrowUpRight className="sample-arrow" size={12} />
-                    )}
+                    <span>{item.n}</span>
+                    {item.label}
                   </button>
                 ))}
               </div>
-            </div>
-          </section>
-          <aside className="right-column">
-            <section className="palette-panel panel">
-              <div className="panel-title">
-                <Palette size={17} />
-                <span>Your palette</span>
-                <span className="count-badge">{p.colorCount}</span>
-              </div>
-              <div className="palette-body">
-                <label className="field">
-                  <span>
-                    Total colors{" "}
-                    <span className="label-hint">base included</span>
-                  </span>
-                  <div className="color-count">
-                    {[2, 3, 4, 5, 6, 7, 8].map((n) => (
-                      <button
-                        key={n}
-                        className={p.colorCount === n ? "selected" : ""}
-                        aria-label={`${n} total colors`}
-                        aria-pressed={p.colorCount === n}
-                        onClick={() => {
-                          autoPalette.current = true;
-                          change({
-                            colorCount: n,
-                            matchBase: p.colors[0],
-                            colors: [
-                              ...p.colors,
-                              ...Array(8).fill("#8D9B88"),
-                            ].slice(0, n),
-                            mapping: Array.from({ length: n }, (_, i) => i),
-                          });
-                        }}
-                      >
-                        {n}
-                      </button>
-                    ))}
-                  </div>
-                </label>
-                <p className="control-note">
-                  One slot for the base. The rest bring your artwork to life.
-                </p>
-                <div className="color-list">
-                  {p.colors.slice(0, p.colorCount).map((hex, i) => (
-                    <div className="color-row" key={i}>
-                      <label
-                        className="swatch"
-                        style={{ background: hex }}
-                        title={`Choose filament ${i + 1} color`}
-                      >
-                        <input
-                          type="color"
-                          aria-label={`Filament ${i + 1} color`}
-                          value={hex}
-                          onChange={(e) => {
-                            const colors = [...p.colors];
-                            colors[i] = e.target.value.toUpperCase();
-                            change({ colors });
-                          }}
-                        />
-                        <span>{i + 1}</span>
-                      </label>
-                      <div>
-                        <strong>
-                          {i === 0 ? "Coaster base" : colorName(hex)}
-                        </strong>
-                        <span>
-                          {hex.toUpperCase()}
-                          {i === 0 && <b>BASE</b>}
-                        </span>
+              <div
+                className="settings-body"
+                id="settings-content"
+                role="tabpanel"
+                aria-labelledby={"tab-" + tab}
+              >
+                {tab === "coaster" && (
+                  <>
+                    <Section
+                      title="Coaster size"
+                      number="01"
+                      icon={<Ruler size={17} />}
+                    >
+                      <p className="section-description">
+                        Start with the shape and dimensions.
+                      </p>
+                      <div className="shape-picker">
+                        {[
+                          { id: "circle", label: "Round", Icon: Circle },
+                          {
+                            id: "rounded",
+                            label: "Rounded square",
+                            Icon: Square,
+                          },
+                          { id: "hexagon", label: "Hexagon", Icon: Hexagon },
+                        ].map(({ id, label, Icon }) => (
+                          <button
+                            key={id}
+                            className={p.shape === id ? "selected" : ""}
+                            aria-pressed={p.shape === id}
+                            onClick={() =>
+                              change({ shape: id as Project["shape"] })
+                            }
+                          >
+                            <Icon size={25} strokeWidth={1.5} />
+                            <span>{label}</span>
+                          </button>
+                        ))}
                       </div>
-                      <span className="color-row-end">
-                        {i === 0 ? (
-                          <Layers3 size={14} />
-                        ) : (
-                          <span
-                            className="color-dot"
-                            style={{ background: hex }}
-                          />
-                        )}
-                      </span>
-                    </div>
-                  ))}
-                </div>
-                <button
-                  className="button light auto-match"
-                  onClick={() => {
-                    autoPalette.current = true;
-                    change({ matchBase: p.colors[0] });
-                    setRecolor((n) => n + 1);
-                    notify("Matching the palette to your original artwork.");
-                  }}
-                  disabled={processing}
-                >
-                  <WandSparkles size={15} />
-                  {processing ? "Matching colors…" : "Auto-match artwork"}
-                </button>
-                <button
-                  className="mapping-toggle"
-                  onClick={() => setShowMap(!showMap)}
-                  aria-expanded={showMap}
-                >
-                  <span>Map artwork colors</span>
-                  <ChevronDown size={14} className={showMap ? "turned" : ""} />
-                </button>
-                {showMap && (
-                  <div className="color-mapping">
-                    <p>Send each detected color to a filament slot.</p>
-                    {art?.sourceColors.map((hex, i) => (
-                      <label className="mapping-row" key={i}>
-                        <span
-                          className="source-swatch"
-                          style={{ background: hex }}
+                      <div className="field-grid">
+                        <Field
+                          label={p.shape === "circle" ? "Diameter" : "Width"}
+                          value={p.diameter}
+                          min={30}
+                          max={250}
+                          onChange={(diameter) => change({ diameter })}
                         />
-                        <ArrowRight size={12} />
+                        <Field
+                          label="Total thickness"
+                          value={p.thickness}
+                          min={1.2}
+                          max={20}
+                          step={0.2}
+                          onChange={(thickness) => change({ thickness })}
+                        />
+                      </div>
+                      <div className="size-presets">
+                        <span>Common sizes</span>
+                        {[85, 100, 110].map((n) => (
+                          <button
+                            key={n}
+                            className={n === p.diameter ? "active" : ""}
+                            onClick={() => change({ diameter: n })}
+                          >
+                            {n} mm
+                          </button>
+                        ))}
+                      </div>
+                      <Slider
+                        label="Border around image"
+                        value={p.margin}
+                        min={0}
+                        max={12}
+                        step={0.5}
+                        unit=" mm"
+                        onChange={(margin) => change({ margin })}
+                      />
+                      <p className="control-note">
+                        The image is clipped inside this border. The top stays
+                        flat.
+                      </p>
+                    </Section>
+                    <details className="disclosure">
+                      <summary>
+                        Print settings<span>Optional</span>
+                      </summary>
+                      <Field
+                        label="Color layer depth"
+                        value={p.inlayDepth}
+                        min={0.2}
+                        max={3}
+                        step={0.2}
+                        onChange={(inlayDepth) => change({ inlayDepth })}
+                        hint="Depth of the colored inlay. 0.6 mm is a useful starting point."
+                      />
+                      <label className="field">
+                        <span>Image detail</span>
                         <select
-                          aria-label={`Map detected color ${i + 1}`}
-                          value={p.mapping[i] ?? i}
-                          onChange={(e) => {
-                            const mapping = [...p.mapping];
-                            mapping[i] = Number(e.target.value);
-                            change({ mapping });
-                          }}
+                          aria-label="Image detail"
+                          value={p.detail}
+                          onChange={(e) =>
+                            change({ detail: Number(e.target.value) })
+                          }
                         >
-                          {p.colors.slice(0, p.colorCount).map((c, j) => (
-                            <option key={j} value={j}>
-                              Slot {j + 1} · {j === 0 ? "Base" : colorName(c)}
-                            </option>
-                          ))}
+                          <option value={192}>Quick</option>
+                          <option value={320}>Standard</option>
+                          <option value={512}>High (recommended)</option>
+                          <option value={768}>Extra high (slower)</option>
                         </select>
                       </label>
-                    ))}
-                  </div>
+                    </details>
+                    <button
+                      className="button primary full next-step"
+                      onClick={() => setTab("artwork")}
+                    >
+                      Next: image & colors
+                      <ArrowRight size={16} />
+                    </button>
+                  </>
                 )}
-                <div className="palette-tip">
-                  <span className="tiny-spark">
-                    <Sparkles size={13} />
-                  </span>
-                  <p>
-                    {p.colorCount <= 4
-                      ? "Four colors or fewer? Perfect for a single AMS."
-                      : "More than four colors needs additional filament capacity."}{" "}
-                    Click any swatch to change it.
-                  </p>
+                {tab === "artwork" && (
+                  <>
+                    <Section
+                      title="Image & colors"
+                      number="02"
+                      icon={<ImagePlus size={17} />}
+                    >
+                      <button
+                        className="upload-zone"
+                        disabled={reading}
+                        onClick={() => fileInput.current?.click()}
+                      >
+                        <Upload size={21} />
+                        <strong>
+                          {reading ? "Reading image…" : "Upload an image"}
+                        </strong>
+                        <span>PNG, JPG, WebP or SVG · up to 20 MB</span>
+                      </button>
+                      <div className="file-chip">
+                        <span title={p.sourceName}>{p.sourceName}</span>
+                        <button
+                          className="text-button"
+                          onClick={() => fileInput.current?.click()}
+                        >
+                          Replace
+                        </button>
+                      </div>
+                      <ColorCount
+                        value={p.colorCount}
+                        onChange={editor.setColorCount}
+                      />
+                      <div className="label-row filament-heading">
+                        <strong>Your filament colors</strong>
+                        <span>Click to change</span>
+                      </div>
+                      <Filaments
+                        colors={p.colors.slice(0, p.colorCount)}
+                        onChange={(colors) => change({ colors })}
+                      />
+                      <details
+                        className="disclosure"
+                        key={p.sourceName + p.colorCount}
+                        open={!!p.source}
+                      >
+                        <summary>
+                          Map image colors<span>Image → filament</span>
+                        </summary>
+                        {art ? (
+                          <ColorMapping
+                            art={art}
+                            colors={p.colors.slice(0, p.colorCount)}
+                            mapping={p.mapping}
+                            onChange={(mapping) => change({ mapping })}
+                          />
+                        ) : (
+                          <p className="control-note">Matching colors…</p>
+                        )}
+                      </details>
+                      <Toggle
+                        label="Smooth edges"
+                        description="Clean up pixel steps. Turn off for pixel art."
+                        checked={p.smoothEdges}
+                        onChange={() => change({ smoothEdges: !p.smoothEdges })}
+                      />
+                      <Toggle
+                        label="Remove background"
+                        description="Remove a plain background connected to the image edges."
+                        checked={p.removeBackground}
+                        onChange={() =>
+                          change({ removeBackground: !p.removeBackground })
+                        }
+                      />
+                    </Section>
+                    <details className="disclosure" open>
+                      <summary>
+                        Size & position<span>Drag in the top view</span>
+                      </summary>
+                      <Slider
+                        label="Artwork size"
+                        value={p.artScale}
+                        min={5}
+                        max={180}
+                        unit="%"
+                        onChange={(artScale) => change({ artScale })}
+                      />
+                      <div className="fit-actions">
+                        <button
+                          className="button light small"
+                          disabled={!art}
+                          onClick={() => align("center")}
+                        >
+                          <Crosshair size={15} />
+                          Center
+                        </button>
+                        <button
+                          className="button light small"
+                          disabled={!art}
+                          onClick={fitImage}
+                        >
+                          <Maximize size={15} />
+                          Fit to coaster
+                        </button>
+                      </div>
+                      <Slider
+                        label="Rotation"
+                        value={p.rotation}
+                        min={-180}
+                        max={180}
+                        unit="°"
+                        onChange={(rotation) => change({ rotation })}
+                      />
+                      <div className="alignment-tools">
+                        {alignmentButtons.map(({ id, label, Icon }) => (
+                          <button
+                            key={id}
+                            className="icon-button"
+                            title={label}
+                            aria-label={label}
+                            disabled={!art}
+                            onClick={() => align(id)}
+                          >
+                            <Icon size={19} />
+                          </button>
+                        ))}
+                      </div>
+                      <Toggle
+                        label="Snap to center & border"
+                        checked={p.snapEnabled}
+                        onChange={() => change({ snapEnabled: !p.snapEnabled })}
+                      />
+                      <Toggle
+                        label="Show center guides"
+                        checked={p.showGuides}
+                        onChange={() => change({ showGuides: !p.showGuides })}
+                      />
+                      <Toggle
+                        label="Mirror image"
+                        checked={p.mirror}
+                        onChange={() => change({ mirror: !p.mirror })}
+                      />
+                      <details className="disclosure nested">
+                        <summary>Exact position</summary>
+                        <div className="field-grid">
+                          <Field
+                            label="Position X"
+                            value={p.artX}
+                            min={-p.diameter}
+                            max={p.diameter}
+                            step={0.5}
+                            onChange={(artX) => change({ artX })}
+                          />
+                          <Field
+                            label="Position Y"
+                            value={p.artY}
+                            min={-p.diameter}
+                            max={p.diameter}
+                            step={0.5}
+                            onChange={(artY) => change({ artY })}
+                          />
+                        </div>
+                      </details>
+                    </details>
+                    <button
+                      className="button light full next-step"
+                      onClick={() => setTab("magnets")}
+                    >
+                      Next: magnets (optional)
+                      <ArrowRight size={16} />
+                    </button>
+                  </>
+                )}
+                {tab === "magnets" && (
+                  <Section
+                    title="Magnet pockets"
+                    number="03"
+                    icon={<Magnet size={17} />}
+                  >
+                    <p className="section-description">
+                      Optional recesses on the underside for magnets you glue in
+                      after printing.
+                    </p>
+                    <div className="magnet-options">
+                      {[
+                        {
+                          id: "none",
+                          title: "No magnets",
+                          description: "Solid underside",
+                        },
+                        {
+                          id: "center",
+                          title: "Center magnet",
+                          description: "One pocket in the middle",
+                        },
+                        {
+                          id: "outer",
+                          title: "Outer magnets",
+                          description: "Pockets spaced near the edge",
+                        },
+                      ].map((option) => (
+                        <button
+                          key={option.id}
+                          className={
+                            p.magnetMode === option.id ? "selected" : ""
+                          }
+                          aria-pressed={p.magnetMode === option.id}
+                          onClick={() => {
+                            change({
+                              magnetMode: option.id as Project["magnetMode"],
+                            });
+                            setBottom(option.id !== "none");
+                            setView("2d");
+                          }}
+                        >
+                          <span className="radio-mark" />
+                          <span>
+                            <strong>{option.title}</strong>
+                            <small>{option.description}</small>
+                          </span>
+                        </button>
+                      ))}
+                    </div>
+                    {p.magnetMode !== "none" && (
+                      <>
+                        <div className="field-grid">
+                          <Field
+                            label="Magnet diameter"
+                            value={p.magnetDiameter}
+                            min={1}
+                            max={40}
+                            step={0.5}
+                            onChange={(magnetDiameter) =>
+                              change({ magnetDiameter })
+                            }
+                          />
+                          <Field
+                            label="Magnet thickness"
+                            value={p.magnetDepth}
+                            min={0.5}
+                            max={10}
+                            step={0.5}
+                            onChange={(magnetDepth) => change({ magnetDepth })}
+                          />
+                        </div>
+                        {p.magnetMode === "outer" && (
+                          <>
+                            <label className="field">
+                              <span>Number of magnets</span>
+                              <select
+                                aria-label="Number of magnets"
+                                value={p.magnetCount}
+                                onChange={(e) =>
+                                  change({
+                                    magnetCount: Number(e.target.value),
+                                  })
+                                }
+                              >
+                                {[2, 3, 4, 6, 8].map((n) => (
+                                  <option key={n} value={n}>
+                                    {n} magnets
+                                  </option>
+                                ))}
+                              </select>
+                            </label>
+                            <Field
+                              label="Gap from edge"
+                              value={p.edgeGap}
+                              min={0.8}
+                              max={p.diameter / 2}
+                              step={0.5}
+                              onChange={(edgeGap) => change({ edgeGap })}
+                              hint="Distance from the pocket wall to the coaster edge."
+                            />
+                          </>
+                        )}
+                        <details className="disclosure">
+                          <summary>
+                            Fit clearance<span>Optional</span>
+                          </summary>
+                          <Field
+                            label="Diameter clearance"
+                            value={p.clearance}
+                            min={0}
+                            max={1}
+                            step={0.05}
+                            onChange={(clearance) => change({ clearance })}
+                            hint="Added to the pocket diameter so the magnet fits more easily."
+                          />
+                        </details>
+                        <p className="info-note">
+                          Pocket size: Ø
+                          {Number((p.magnetDiameter + p.clearance).toFixed(2))}{" "}
+                          × {Number((p.magnetDepth + 0.1).toFixed(2))} mm.
+                          Includes 0.1 mm of depth clearance.
+                        </p>
+                      </>
+                    )}
+                    <button
+                      className="button primary full next-step"
+                      disabled={!canExport}
+                      onClick={() => {
+                        setBottom(false);
+                        setView("3d");
+                        notify(
+                          "Inspect the 3D preview, then download your 3MF.",
+                        );
+                      }}
+                    >
+                      Review coaster
+                      <Box size={16} />
+                    </button>
+                  </Section>
+                )}
+                <div className="settings-footer">
+                  <span>Artwork stays on your device</span>
+                  <button
+                    className="text-button"
+                    onClick={() => setDialog("reset")}
+                  >
+                    <RotateCcw size={12} />
+                    Reset
+                  </button>
                 </div>
               </div>
-            </section>
-            <section className="make-panel panel">
-              <div className="make-heading">
-                <span className="make-icon">
-                  <Box size={20} />
-                </span>
-                <div>
-                  <h2>From screen to table.</h2>
-                  <p>Your next coffee break, upgraded.</p>
-                </div>
-              </div>
-              <div className="model-stats">
-                <div>
-                  <span>Size</span>
-                  <strong>
-                    {p.diameter} × {p.thickness}
-                    <small>mm</small>
-                  </strong>
-                </div>
-                <div>
-                  <span>Solid PLA estimate</span>
-                  <strong>
-                    {totalWeight ? totalWeight.toFixed(1) : "—"}
-                    <small>g</small>
-                  </strong>
-                </div>
-                <div>
-                  <span>Filaments used</span>
-                  <strong>
-                    {usedColors}
-                    <small>colors</small>
-                  </strong>
-                </div>
-                <div>
-                  <span>Magnet pockets</span>
-                  <strong>
-                    {magnetCenters(p).length}
-                    <small>
-                      {p.magnetMode === "center"
-                        ? "center"
-                        : p.magnetMode === "outer"
-                          ? "outer"
-                          : "none"}
-                    </small>
-                  </strong>
-                </div>
-              </div>
-              <button
-                className="button dark full"
-                disabled={!canExport || exporting}
-                onClick={() => exportFile("3mf")}
-              >
-                <ArrowDownToLine size={16} />
-                {exporting ? "Preparing…" : "Download 3MF"}
-                <span className="with-colors">+ colors</span>
-              </button>
-              <button
-                className="button bambu full"
-                disabled={!canExport}
-                onClick={() => {
-                  setBambuReady(false);
-                  setDialog("bambu");
-                }}
-              >
-                <span className="bambu-glyph">B</span>Open in Bambu Studio
-                <ArrowUpRight size={14} />
-              </button>
-              <div className="export-footnote">
-                <Check size={12} />
-                Color parts & magnet pockets included
-              </div>
-            </section>
-          </aside>
-        </div>
-        <footer className="site-footer">
-          <span>
-            <span className="footer-mark">c.</span> Made for makers. And their
-            mugs.
-          </span>
-          <span>
-            <ShieldCheck size={13} />
-            No uploads. No accounts. Just create.
-          </span>
-          <button onClick={() => setDialog("help")}>
-            A few useful things <ArrowUpRight size={12} />
-          </button>
-        </footer>
-      </main>
+            </aside>
+          </div>
+          <footer className="site-footer">
+            <span>
+              No account needed. Your design is saved in this browser.
+            </span>
+            <button className="text-button" onClick={() => setDialog("export")}>
+              SVG, STL & project files
+              <ArrowRight size={13} />
+            </button>
+          </footer>
+        </main>
+      </div>
       <input
         type="file"
         hidden
@@ -1522,273 +1171,158 @@ export default function App() {
         accept=".json"
         aria-label="Open CoasterGen project"
         onChange={(e) => {
-          importProject(e.target.files?.[0]);
+          openProject(e.target.files?.[0]);
           e.target.value = "";
         }}
       />
       {toast && (
         <div className="toast" role="status">
-          <Check size={17} />
           <span>{toast}</span>
           <button
-            onClick={() => setToast("")}
+            className="icon-button"
             aria-label="Dismiss notification"
+            onClick={() => setToast("")}
           >
             <X size={15} />
           </button>
         </div>
       )}
-      {dialog === "help" && (
-        <Modal
-          title="A coaster, in a few good steps."
-          onClose={() => setDialog(null)}
-        >
-          <p className="modal-lead">
-            Your artwork becomes real colored parts, ready for your slicer.
-          </p>
-          <div className="help-steps">
-            {[
-              {
-                icon: Ruler,
-                title: "Start with the shape.",
-                text: "Set the size and total height. A 100 mm round coaster at 4 mm thick is a great place to start.",
-              },
-              {
-                icon: ImagePlus,
-                title: "Bring your own artwork.",
-                text: "Drop in a PNG, JPG, WebP, or SVG. We reduce its colors and trace it into vector outlines on your device. Transparent images and bold shapes work best.",
-              },
-              {
-                icon: Palette,
-                title: "Make every color count.",
-                text: "The default is four colors total, including the base. Change swatches to match your filament, or remap several image colors to one slot.",
-              },
-              {
-                icon: Magnet,
-                title: "Add a little pull. Or don’t.",
-                text: "Choose a center magnet or evenly spaced outer magnets. Pockets open on the underside; their size includes your selected fit clearance.",
-              },
-              {
-                icon: Download,
-                title: "Take it to the printer.",
-                text: "Download the colored 3MF. Open it as a project in Bambu Studio to keep filament assignments. Select your printer and map the slots to your actual AMS filaments before slicing.",
-              },
-            ].map((s, i) => (
-              <div key={i}>
-                <span>
-                  <s.icon size={18} />
-                </span>
-                <div>
-                  <h3>{s.title}</h3>
-                  <p>{s.text}</p>
-                </div>
-              </div>
-            ))}
-          </div>
-          <div className="soft-note">
-            <LockKeyhole size={18} />
-            <p>
-              <strong>Your design stays yours.</strong>Artwork, color matching,
-              geometry, and exports stay on this device. Your last project is
-              saved in this browser; download a project copy to keep it
-              elsewhere.
-            </p>
-          </div>
-          <button
-            className="button primary full"
-            onClick={() => setDialog(null)}
-          >
-            Let’s make something
-            <ArrowRight size={16} />
-          </button>
-        </Modal>
+      {dialog === "tutorial" && <Tutorial onClose={closeTutorial} />}
+      {pendingImage && (
+        <ImportDialog
+          source={pendingImage.source}
+          name={pendingImage.name}
+          project={p}
+          onClose={() => setPendingImage(null)}
+          onApply={(next, artwork) => {
+            editor.applyImage(next, artwork);
+            setPendingImage(null);
+            setTab("artwork");
+            setView("2d");
+            setBottom(false);
+            setZoom(1);
+          }}
+        />
       )}
       {dialog === "export" && (
-        <Modal
-          title="Ready to leave the screen?"
-          onClose={() => setDialog(null)}
-        >
+        <Modal title="Download your coaster" onClose={() => setDialog(null)}>
           <p className="modal-lead">
-            Choose how you’d like to take your coaster with you.
+            Use 3MF for multicolor printing. Save a project copy to edit this
+            design later.
           </p>
           <div className="export-options">
-            <button onClick={() => exportFile("3mf")} disabled={exporting}>
-              <span className="export-format orange">3MF</span>
+            <button
+              disabled={!canExport || exporting}
+              onClick={() => exportFile("3mf")}
+            >
+              <span className="export-format">3MF</span>
               <span>
-                <strong>
-                  Colored 3D model <b>RECOMMENDED</b>
-                </strong>
-                <small>
-                  Separate color parts, Bambu filament slots, real magnet
-                  pockets.
-                </small>
+                <strong>Colored 3D model</strong>
+                <small>Geometry, filament colors and magnet pockets</small>
               </span>
               <Download size={18} />
             </button>
             <button
-              onClick={() => {
-                setBambuReady(false);
-                setDialog("bambu");
-              }}
+              disabled={!canExport || exporting}
+              onClick={() => exportFile("svg")}
             >
-              <span className="export-format green">B</span>
-              <span>
-                <strong>Bambu Studio</strong>
-                <small>Save your colored 3MF and launch your slicer.</small>
-              </span>
-              <ArrowUpRight size={18} />
-            </button>
-            <button onClick={() => exportFile("svg")}>
               <span className="export-format">SVG</span>
               <span>
                 <strong>Color-matched vector artwork</strong>
-                <small>Centered at actual size, clipped to your coaster.</small>
+                <small>Actual coaster size, with smooth outlines</small>
               </span>
               <Download size={18} />
             </button>
-            <button onClick={() => exportFile("stl")}>
+            <button
+              disabled={!canExport || exporting}
+              onClick={() => exportFile("stl")}
+            >
               <span className="export-format">STL</span>
               <span>
                 <strong>Geometry only</strong>
-                <small>
-                  All parts, without color information. Use 3MF for multicolor
-                  printing.
-                </small>
+                <small>Contains no filament colors</small>
               </span>
               <Download size={18} />
             </button>
             <button onClick={saveProject}>
-              <span className="export-format">
-                <FileJson size={22} />
-              </span>
+              <span className="export-format">JSON</span>
               <span>
-                <strong>Editable CoasterGen project</strong>
-                <small>
-                  Your settings, colors, and original image. Pick up where you
-                  left off.
-                </small>
+                <strong>Editable project</strong>
+                <small>Original image and every setting</small>
               </span>
-              <Download size={18} />
+              <Save size={18} />
             </button>
           </div>
-          <div className="export-summary">
-            <span>
-              {p.diameter} × {p.thickness} mm
-            </span>
-            <i />
-            <span>{usedColors} colors</span>
-            <i />
-            <span>{magnetCenters(p).length} magnet pockets</span>
-          </div>
-          <p className="modal-fine">
-            The 3MF contains geometry and colors, not G-code. Choose your
-            printer, material, layer height, and AMS mapping in your slicer.
-            Fine image details may be smaller than your nozzle.
-          </p>
         </Modal>
       )}
       {dialog === "bambu" && (
         <Modal
-          title={
-            bambuReady
-              ? "Your coaster is ready for Studio."
-              : "Meet your next print."
-          }
+          title="Open your coaster in Bambu Studio"
           onClose={() => setDialog(null)}
         >
-          <div className="bambu-hero">
-            <span className="bambu-glyph large">B</span>
-            <span className="connection-dots">······</span>
-            <Layers3 size={42} />
+          <div className="bambu-intro">
+            <BambuLogo large />
+            <p>Download the colored 3MF, then open it in Bambu Studio.</p>
           </div>
-          <p className="modal-lead">A colored 3MF, ready for Bambu Studio.</p>
           <ol className="bambu-steps">
+            <li>Click below to download your file and launch Studio.</li>
             <li>
-              <span>1</span>
-              <p>
-                <strong>Download & launch.</strong>Save the 3MF and allow your
-                browser to open Bambu Studio.
-              </p>
+              In Studio, use <strong>File → Open Project</strong> and select{" "}
+              <strong>{filename(p)}.3mf</strong>. Keep the parts together.
             </li>
             <li>
-              <span>2</span>
-              <p>
-                <strong>Open the downloaded file.</strong>Drag{" "}
-                <b>{filename(p)}.3mf</b> into Studio, or use File → Open
-                Project. Keep it as one multipart object.
-              </p>
-            </li>
-            <li>
-              <span>3</span>
-              <p>
-                <strong>Match your filaments.</strong>Choose your printer and
-                map the colored slots to your AMS. Slice when you’re happy with
-                the preview.
-              </p>
+              Choose your printer, match each filament slot to your spools, then
+              slice.
             </li>
           </ol>
-          <div className="soft-note">
-            <LockKeyhole size={17} />
-            <p>
-              To keep your artwork private, the file stays on your device.
-              Browsers can’t pass a local file directly into Studio.
-            </p>
-          </div>
           <button
-            className="button bambu full large-button"
-            disabled={exporting}
+            className="button primary full"
+            disabled={!canExport || exporting}
             onClick={() => exportFile("3mf", true)}
           >
-            {bambuReady ? <RotateCcw size={17} /> : <Download size={17} />}{" "}
+            <BambuLogo />
             {bambuReady
               ? "Download & launch again"
               : "Download & launch Studio"}
             <ArrowUpRight size={15} />
           </button>
-          <button
-            className="inline-link centered"
-            onClick={() => exportFile("3mf")}
-          >
-            Just download the colored 3MF
-            <Download size={13} />
-          </button>
-          <p className="modal-fine">
-            Requires Bambu Studio installed. If your browser doesn’t launch it,
-            open Studio manually and import the downloaded 3MF.
+          <p className="control-note">
+            Requires Bambu Studio installed. If it doesn't launch, open Studio
+            manually. Your browser saves the file locally; you select it in
+            Studio.
           </p>
+          {bambuReady && (
+            <p className="info-note" role="status">
+              3MF downloaded. Open it in Studio to continue.
+            </p>
+          )}
         </Modal>
       )}
-      {dialog === "new" && (
-        <Modal title="A fresh little start?" onClose={() => setDialog(null)}>
+      {dialog === "reset" && (
+        <Modal title="Reset this coaster?" onClose={() => setDialog(null)}>
           <p className="modal-lead">
-            Reset the coaster to Golden hour with its original size, colors, and
-            artwork. Save a project copy first if you’d like to keep this
-            version.
+            Return to the example design and default settings. You can undo the
+            reset.
           </p>
           <div className="modal-actions">
-            <button className="button light" onClick={saveProject}>
-              <Save size={16} />
-              Save a copy
+            <button className="button light" onClick={() => setDialog(null)}>
+              Cancel
             </button>
             <button
               className="button primary"
               onClick={() => {
-                autoPalette.current = true;
-                restorePalette.current = false;
-                change({ ...DEFAULT_PROJECT, colors: [...DEFAULT_COLORS] });
-                setRecolor((v) => v + 1);
+                change(structuredClone(DEFAULT_PROJECT), true);
                 setDialog(null);
                 setBottom(false);
                 setZoom(1);
-                notify("Fresh start. You can undo this reset.");
+                setTab("coaster");
               }}
             >
-              <RotateCcw size={16} />
               Reset coaster
             </button>
           </div>
         </Modal>
       )}
-    </div>
+    </>
   );
 }

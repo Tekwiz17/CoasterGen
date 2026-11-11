@@ -38,7 +38,12 @@ export function vectorize(
   count: number,
   base: string,
   removeBackground: boolean,
+  smooth = true,
 ): Artwork {
+  if (!Number.isInteger(count) || count < 2 || count > 8)
+    throw new Error("Choose between 2 and 8 total colors.");
+  if (width < 1 || height < 1 || data.length !== width * height * 4)
+    throw new Error("The image has invalid dimensions.");
   const transparent = new Uint8Array(width * height);
   let removed = 0;
   for (let i = 0; i < transparent.length; i++)
@@ -172,13 +177,54 @@ export function vectorize(
         if (v !== undefined) filtered[i] = v;
       }
     }
+  // Reassign tiny disconnected color flecks (often antialiasing/compression
+  // artifacts). Work from a snapshot so scan direction cannot change results.
+  if (smooth) {
+    const seen = new Uint8Array(labels.length);
+    for (let start = 0; start < labels.length; start++) {
+      if (seen[start] || labels[start] === 255) continue;
+      const color = labels[start],
+        component = [start];
+      const neighbors = new Map<number, number>();
+      seen[start] = 1;
+      for (let q = 0; q < component.length; q++) {
+        const i = component[q],
+          x = i % width,
+          y = Math.floor(i / width);
+        const adjacent = [
+          x > 0 ? i - 1 : -1,
+          x < width - 1 ? i + 1 : -1,
+          y > 0 ? i - width : -1,
+          y < height - 1 ? i + width : -1,
+        ];
+        for (const n of adjacent) {
+          if (n < 0) continue;
+          if (labels[n] === color) {
+            if (!seen[n]) {
+              seen[n] = 1;
+              component.push(n);
+            }
+          } else if (labels[n] !== 255) {
+            neighbors.set(labels[n], (neighbors.get(labels[n]) ?? 0) + 1);
+          }
+        }
+      }
+      if (component.length <= 3 && neighbors.size) {
+        const replacement = [...neighbors].sort((a, b) => b[1] - a[1])[0][0];
+        for (const i of component) filtered[i] = replacement;
+      }
+    }
+  }
+  const vertices = smooth
+    ? smoothBoundaries(filtered, width, height)
+    : undefined;
   const counts = Array(count).fill(0);
   for (const v of filtered) if (v !== 255) counts[v]++;
   return {
     width,
     height,
     loops: Array.from({ length: count }, (_, c) =>
-      trace(filtered, width, height, c),
+      trace(filtered, width, height, c, vertices),
     ),
     sourceColors: colors.map(hex),
     counts,
@@ -186,11 +232,129 @@ export function vectorize(
     removed,
   };
 }
+// Every color uses the SAME boundary graph. Smoothing each color separately
+// creates slivers and gaps in both the preview and the printed inlays. Junctions
+// stay fixed; only degree-two boundary vertices move, by less than one pixel.
+function smoothBoundaries(labels: Uint8Array, w: number, h: number) {
+  const stride = w + 1;
+  const graph = new Map<number, number[]>();
+  const link = (a: number, b: number) => {
+    (graph.get(a) ?? (graph.set(a, []), graph.get(a)!)).push(b);
+    (graph.get(b) ?? (graph.set(b, []), graph.get(b)!)).push(a);
+  };
+  const label = (x: number, y: number) =>
+    x < 0 || y < 0 || x >= w || y >= h ? 255 : labels[y * w + x];
+  for (let y = 0; y <= h; y++)
+    for (let x = 0; x < w; x++)
+      if (label(x, y - 1) !== label(x, y))
+        link(y * stride + x, y * stride + x + 1);
+  for (let y = 0; y < h; y++)
+    for (let x = 0; x <= w; x++)
+      if (label(x - 1, y) !== label(x, y))
+        link(y * stride + x, (y + 1) * stride + x);
+  let points = new Map<number, Vec2>();
+  for (const key of graph.keys())
+    points.set(key, [key % stride, Math.floor(key / stride)]);
+  for (let pass = 0; pass < 4; pass++) {
+    const next = new Map<number, Vec2>();
+    for (const [key, adjacent] of graph) {
+      const p = points.get(key)!;
+      if (adjacent.length !== 2) {
+        next.set(key, p);
+        continue;
+      }
+      const a = points.get(adjacent[0])!,
+        b = points.get(adjacent[1])!;
+      next.set(key, [
+        p[0] * 0.4 + (a[0] + b[0]) * 0.3,
+        p[1] * 0.4 + (a[1] + b[1]) * 0.3,
+      ]);
+    }
+    points = next;
+  }
+  // Simplify shared chains once so adjoining inlays keep identical vertices.
+  const keep = new Set<number>();
+  const visited = new Set<string>();
+  const edgeKey = (a: number, b: number) => (a < b ? a + "," + b : b + "," + a);
+  const simplify = (chain: number[]) => {
+    const stack: [number, number][] = [[0, chain.length - 1]];
+    keep.add(chain[0]);
+    keep.add(chain[chain.length - 1]);
+    while (stack.length) {
+      const [start, end] = stack.pop()!;
+      const a = points.get(chain[start])!,
+        b = points.get(chain[end])!;
+      const dx = b[0] - a[0],
+        dy = b[1] - a[1],
+        length = dx * dx + dy * dy;
+      let distance = 0.45 * 0.45,
+        far = -1;
+      for (let i = start + 1; i < end; i++) {
+        const p = points.get(chain[i])!;
+        const t = length
+          ? Math.max(
+              0,
+              Math.min(1, ((p[0] - a[0]) * dx + (p[1] - a[1]) * dy) / length),
+            )
+          : 0;
+        const d = (p[0] - a[0] - t * dx) ** 2 + (p[1] - a[1] - t * dy) ** 2;
+        if (d > distance) {
+          distance = d;
+          far = i;
+        }
+      }
+      if (far >= 0) {
+        keep.add(chain[far]);
+        stack.push([start, far], [far, end]);
+      }
+    }
+  };
+  const walk = (start: number, first: number) => {
+    const chain = [start];
+    let prev = start,
+      key = first;
+    visited.add(edgeKey(start, first));
+    while (true) {
+      chain.push(key);
+      if (key === start || graph.get(key)!.length !== 2) break;
+      const next = graph.get(key)!.find((n) => n !== prev)!;
+      visited.add(edgeKey(key, next));
+      prev = key;
+      key = next;
+    }
+    if (key === start) {
+      let far = 1,
+        distance = 0;
+      const a = points.get(start)!;
+      for (let i = 1; i < chain.length - 1; i++) {
+        const p = points.get(chain[i])!,
+          d = (p[0] - a[0]) ** 2 + (p[1] - a[1]) ** 2;
+        if (d > distance) {
+          distance = d;
+          far = i;
+        }
+      }
+      simplify(chain.slice(0, far + 1));
+      simplify(chain.slice(far));
+    } else simplify(chain);
+  };
+  for (const [key, adjacent] of graph)
+    if (adjacent.length !== 2) {
+      keep.add(key);
+      for (const next of adjacent)
+        if (!visited.has(edgeKey(key, next))) walk(key, next);
+    }
+  for (const [key, adjacent] of graph)
+    for (const next of adjacent)
+      if (!visited.has(edgeKey(key, next))) walk(key, next);
+  return { points, keep };
+}
 function trace(
   labels: Uint8Array,
   w: number,
   h: number,
   color: number,
+  vertices?: { points: Map<number, Vec2>; keep: Set<number> },
 ): Vec2[][] {
   const stride = w + 1;
   type Edge = { end: number; dir: number };
@@ -220,7 +384,10 @@ function trace(
     const loop: Vec2[] = [];
     let guard = 0;
     do {
-      loop.push([key % stride, Math.floor(key / stride)]);
+      if (!vertices || vertices.keep.has(key))
+        loop.push(
+          vertices?.points.get(key) ?? [key % stride, Math.floor(key / stride)],
+        );
       const list = edges.get(key);
       if (!list?.length) break;
       let j = 0;
@@ -234,11 +401,15 @@ function trace(
       key = edge.end;
       prev = edge.dir;
     } while (key !== start && ++guard < 2e6);
-    if (key === start && loop.length >= 4) {
+    if (key === start && loop.length >= 3) {
       const clean = loop.filter((p, i) => {
         const a = loop[(i + loop.length - 1) % loop.length],
           b = loop[(i + 1) % loop.length];
-        return (p[0] - a[0]) * (b[1] - p[1]) !== (p[1] - a[1]) * (b[0] - p[0]);
+        return (
+          Math.abs(
+            (p[0] - a[0]) * (b[1] - p[1]) - (p[1] - a[1]) * (b[0] - p[0]),
+          ) > 1e-8
+        );
       });
       const area = Math.abs(
         clean.reduce((a, p, i) => {
@@ -246,54 +417,9 @@ function trace(
           return a + p[0] * n[1] - n[0] * p[1];
         }, 0) / 2,
       );
-      if (area >= 2) loops.push(simplifyClosed(clean, 0.35));
+      // Collinear removal is reversible, so shared segments remain identical.
+      if (area >= 1 && clean.length >= 3) loops.push(clean);
     }
   }
   return loops;
-}
-function simplifyClosed(loop: Vec2[], eps: number): Vec2[] {
-  if (loop.length < 6) return loop;
-  let far = 1,
-    ds = 0;
-  for (let i = 1; i < loop.length; i++) {
-    const d = (loop[i][0] - loop[0][0]) ** 2 + (loop[i][1] - loop[0][1]) ** 2;
-    if (d > ds) {
-      ds = d;
-      far = i;
-    }
-  }
-  return [
-    ...rdp(loop.slice(0, far + 1), eps).slice(0, -1),
-    ...rdp([...loop.slice(far), loop[0]], eps).slice(0, -1),
-  ];
-}
-function rdp(points: Vec2[], eps: number): Vec2[] {
-  if (points.length <= 2) return points;
-  const a = points[0],
-    b = points.at(-1)!,
-    dx = b[0] - a[0],
-    dy = b[1] - a[1],
-    d = dx * dx + dy * dy;
-  let max = 0,
-    index = 0;
-  for (let i = 1; i < points.length - 1; i++) {
-    const p = points[i],
-      t = d
-        ? Math.max(
-            0,
-            Math.min(1, ((p[0] - a[0]) * dx + (p[1] - a[1]) * dy) / d),
-          )
-        : 0;
-    const ds = (p[0] - a[0] - t * dx) ** 2 + (p[1] - a[1] - t * dy) ** 2;
-    if (ds > max) {
-      max = ds;
-      index = i;
-    }
-  }
-  return max > eps * eps
-    ? [
-        ...rdp(points.slice(0, index + 1), eps).slice(0, -1),
-        ...rdp(points.slice(index), eps),
-      ]
-    : [a, b];
 }

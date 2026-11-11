@@ -40,6 +40,23 @@ export async function readArtwork(file: File): Promise<string> {
       doc.documentElement.localName !== "svg"
     )
       throw new Error("This SVG is invalid. Try exporting it again.");
+    // Inline local SVG class rules before removing stylesheets. Many exported
+    // logos use classes for every fill; deleting those rules turns them black.
+    for (const style of Array.from(doc.querySelectorAll("style")).reverse()) {
+      try {
+        const sheet = new CSSStyleSheet();
+        sheet.replaceSync(style.textContent ?? "");
+        for (const rule of Array.from(sheet.cssRules).reverse()) {
+          if (!(rule instanceof CSSStyleRule)) continue;
+          for (const el of doc.querySelectorAll(rule.selectorText)) {
+            const existing = el.getAttribute("style") ?? "";
+            el.setAttribute("style", rule.style.cssText + ";" + existing);
+          }
+        }
+      } catch {
+        /* Unsupported selectors are ignored; presentation attributes remain. */
+      }
+    }
     doc
       .querySelectorAll(
         "script,foreignObject,iframe,object,embed,style,animate,animateTransform,set",
@@ -49,8 +66,15 @@ export async function readArtwork(file: File): Promise<string> {
       for (const a of Array.from(el.attributes)) {
         if (
           /^on/i.test(a.name) ||
-          (/href$/i.test(a.name) && !a.value.startsWith("#")) ||
-          /url\(\s*[^#]/i.test(a.value)
+          (/href$/i.test(a.name) &&
+            !a.value.startsWith("#") &&
+            !(
+              el.localName === "image" &&
+              /^data:image\/(png|jpeg|webp);base64,/i.test(a.value)
+            )) ||
+          [...a.value.matchAll(/url\(([^)]*)\)/gi)].some(
+            (match) => !/^\s*["']?#[^"'\s]+["']?\s*$/.test(match[1]),
+          )
         )
           el.removeAttribute(a.name);
       }

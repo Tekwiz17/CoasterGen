@@ -15,9 +15,11 @@ export default function Modal({
     const focusables = () =>
       Array.from(
         ref.current!.querySelectorAll<HTMLElement>(
-          'button,a,input,select,[tabindex="0"]',
+          'button,a,input,select,summary,[tabindex="0"]',
         ),
-      ).filter((x) => !x.hasAttribute("disabled"));
+      ).filter(
+        (x) => !x.hasAttribute("disabled") && x.getClientRects().length > 0,
+      );
     focusables()[0]?.focus();
     const handler = (e: KeyboardEvent) => {
       if (e.key === "Escape") onClose();

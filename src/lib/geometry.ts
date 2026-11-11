@@ -44,14 +44,29 @@ export function validate(p: Project): string[] {
     errors.push("Coaster size must be between 30 and 250 mm.");
   if (!Number.isFinite(p.thickness) || p.thickness < 1.2 || p.thickness > 20)
     errors.push("Thickness must be between 1.2 and 20 mm.");
-  if (p.inlayDepth < 0.2 || p.inlayDepth > p.thickness - 0.6)
+  if (
+    !Number.isFinite(p.inlayDepth) ||
+    p.inlayDepth < 0.2 ||
+    p.inlayDepth > p.thickness - 0.6
+  )
     errors.push("Leave at least 0.6 mm of solid base under the color layer.");
-  if (p.margin < 0 || p.margin >= p.diameter / 2 - 2)
+  if (
+    !Number.isFinite(p.margin) ||
+    p.margin < 0 ||
+    p.margin >= p.diameter / 2 - 2
+  )
     errors.push("The border must leave room for your artwork.");
   if (p.magnetMode !== "none") {
     const pocket = p.magnetDiameter + p.clearance,
       depth = p.magnetDepth + 0.1;
-    if (p.magnetDiameter < 1 || p.magnetDepth < 0.5 || p.clearance < 0)
+    if (
+      ![p.magnetDiameter, p.magnetDepth, p.clearance, p.edgeGap].every(
+        Number.isFinite,
+      ) ||
+      p.magnetDiameter < 1 ||
+      p.magnetDepth < 0.5 ||
+      p.clearance < 0
+    )
       errors.push("Enter a positive magnet size and nonnegative clearance.");
     if (depth > p.thickness - p.inlayDepth - 0.6)
       errors.push(
@@ -60,6 +75,10 @@ export function validate(p: Project): string[] {
     const centers = magnetCenters(p),
       inradius =
         (p.diameter / 2) * (p.shape === "hexagon" ? Math.cos(Math.PI / 6) : 1);
+    if (p.magnetMode === "outer" && p.edgeGap + pocket / 2 >= inradius)
+      errors.push(
+        "The edge gap leaves no room for outer magnets. Reduce the gap or magnet diameter.",
+      );
     if (
       centers.some(
         ([x, y]) => Math.hypot(x, y) + pocket / 2 > inradius - 0.8,

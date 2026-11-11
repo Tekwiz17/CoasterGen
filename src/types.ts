@@ -23,6 +23,7 @@ export interface Project {
   mirror: boolean;
   removeBackground: boolean;
   detail: number;
+  smoothEdges: boolean;
   snapEnabled: boolean;
   showGuides: boolean;
   magnetMode: MagnetMode;
@@ -76,7 +77,8 @@ export const DEFAULT_PROJECT: Project = {
   rotation: 0,
   mirror: false,
   removeBackground: false,
-  detail: 320,
+  detail: 512,
+  smoothEdges: true,
   snapEnabled: true,
   showGuides: true,
   magnetMode: "none",

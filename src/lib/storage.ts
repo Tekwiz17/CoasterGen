@@ -77,7 +77,7 @@ export function parseProject(value: unknown): Project {
     throw new Error("Invalid color map.");
   p.mapping = obj.mapping as number[];
   p.name = p.name.slice(0, 80) || "My coaster";
-  p.detail = [192, 320, 512].includes(p.detail) ? p.detail : 320;
+  p.detail = [192, 320, 512, 768].includes(p.detail) ? p.detail : 512;
   if (
     p.source &&
     (!/^data:image\/(png|jpeg|webp|svg\+xml)[;,]/i.test(p.source) ||

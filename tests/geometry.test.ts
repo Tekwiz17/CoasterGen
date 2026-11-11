@@ -295,3 +295,108 @@ test("alignment centers actual artwork bounds and snaps to center and border", (
   assert.equal(edge.guideX, -47);
   assert.equal(edge.guideY, undefined);
 });
+
+test("smoothing removes stair steps while preserving a circular silhouette and its hole", () => {
+  const w = 96,
+    data = new Uint8ClampedArray(w * w * 4);
+  for (let y = 0; y < w; y++)
+    for (let x = 0; x < w; x++) {
+      if (
+        Math.hypot(x - 47.5, y - 47.5) > 38 ||
+        Math.hypot(x - 47.5, y - 47.5) < 10
+      )
+        continue;
+      const i = (y * w + x) * 4;
+      data.set([30, 40, 60, 255], i);
+    }
+  const raw = vectorize(data, w, w, 2, "#FFFFFF", false, false);
+  const smooth = vectorize(data, w, w, 2, "#FFFFFF", false, true);
+  const perimeter = (art: Artwork) =>
+    art.loops.flat().reduce(
+      (total, loop) =>
+        total +
+        loop.reduce((sum, p, i) => {
+          const n = loop[(i + 1) % loop.length];
+          return sum + Math.hypot(n[0] - p[0], n[1] - p[1]);
+        }, 0),
+      0,
+    );
+  assert.equal(smooth.loops[1].length, 2, "The hole survives smoothing");
+  assert.ok(
+    perimeter(smooth) < perimeter(raw) * 0.93,
+    "Pixel stairs are substantially reduced",
+  );
+  const signedArea = (loop: number[][]) =>
+    loop.reduce((sum, p, i) => {
+      const n = loop[(i + 1) % loop.length];
+      return sum + p[0] * n[1] - n[0] * p[1];
+    }, 0) / 2;
+  const area = (art: Artwork) =>
+    Math.abs(art.loops[1].reduce((sum, loop) => sum + signedArea(loop), 0));
+  assert.ok(
+    Math.abs(area(smooth) / area(raw) - 1) < 0.01,
+    "Area changes by less than one percent",
+  );
+  const p = project({
+    colorCount: 2,
+    colors: smooth.sourceColors,
+    mapping: [0, 1],
+  });
+  const model = buildModel(api, p, smooth);
+  model.parts.forEach(watertight);
+  assert.ok(Math.abs(model.volume - buildModel(api, p, blank).volume) < 0.05);
+});
+
+test("adjacent smoothed colors reuse identical shared boundaries and remain watertight at 2–8 colors", () => {
+  const w = 48,
+    data = new Uint8ClampedArray(w * w * 4);
+  for (let y = 0; y < w; y++)
+    for (let x = 0; x < w; x++) {
+      data.set(
+        x + y < w ? [220, 40, 20, 255] : [20, 60, 210, 255],
+        (y * w + x) * 4,
+      );
+    }
+  const art = vectorize(data, w, w, 3, "#FFFFFF", false, true);
+  const edges = (loops: number[][][]) =>
+    new Set(
+      loops.flatMap((loop) =>
+        loop.map((point, i) => {
+          const next = loop[(i + 1) % loop.length];
+          return [point.join(","), next.join(",")].sort().join("|");
+        }),
+      ),
+    );
+  const first = edges(art.loops[1]),
+    second = edges(art.loops[2]);
+  assert.ok(
+    [...first].filter((edge) => second.has(edge)).length > 0,
+    "Color interfaces match exactly",
+  );
+  for (const count of [8, 4, 2, 3, 2]) {
+    const art = vectorize(data, w, w, count, "#FFFFFF", false, true);
+    const p = project({
+      colorCount: count,
+      colors: art.sourceColors,
+      mapping: Array.from({ length: count }, (_, i) => i),
+    });
+    const m = buildModel(api, p, art);
+    m.parts.forEach(watertight);
+    assert.ok(m.parts.every((part) => part.colorIndex < count));
+    assert.ok(Math.abs(m.volume - buildModel(api, p, blank).volume) < 0.05);
+  }
+});
+
+test("legacy saved projects gain smooth edges and impossible outer magnet gaps are rejected", () => {
+  const legacy = { ...project() } as Partial<Project>;
+  delete legacy.smoothEdges;
+  assert.equal(parseProject(legacy).smoothEdges, true);
+  assert.ok(
+    validate(project({ magnetMode: "outer", edgeGap: 50 })).some((e) =>
+      e.includes("no room"),
+    ),
+  );
+  assert.throws(() =>
+    vectorize(new Uint8ClampedArray(4), 1, 1, 0, "#FFFFFF", false),
+  );
+});

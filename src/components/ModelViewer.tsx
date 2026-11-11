@@ -143,7 +143,7 @@ export default function ModelViewer({
       indexed.dispose();
       geo.computeVertexNormals();
       const mat = new THREE.MeshStandardMaterial({
-        color: project.colors[part.colorIndex],
+        color: project.colors[part.colorIndex] ?? project.colors[0],
         roughness: 0.7,
         metalness: 0,
       });
@@ -162,7 +162,7 @@ export default function ModelViewer({
       const part = model?.parts[i];
       if (part)
         (m.material as THREE.MeshStandardMaterial).color.set(
-          project.colors[part.colorIndex],
+          project.colors[part.colorIndex] ?? project.colors[0],
         );
     }
     s.render();

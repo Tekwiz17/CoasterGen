@@ -10,8 +10,16 @@ self.onmessage = async (e: MessageEvent) => {
   const { id, type, payload } = e.data;
   try {
     if (type === "vectorize") {
-      const { data, width, height, count, base, remove } = payload;
-      const result = vectorize(data, width, height, count, base, remove);
+      const { data, width, height, count, base, remove, smooth } = payload;
+      const result = vectorize(
+        data,
+        width,
+        height,
+        count,
+        base,
+        remove,
+        smooth,
+      );
       self.postMessage({ id, result });
     } else {
       const m = await api;
