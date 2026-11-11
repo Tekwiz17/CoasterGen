@@ -1,10 +1,12 @@
 export type Vec2 = [number, number];
-export type Shape = "circle" | "rounded" | "hexagon";
+export type Shape = "circle" | "rounded" | "hexagon" | "custom";
 export type MagnetMode = "none" | "center" | "outer";
 export interface Project {
   version: 1;
   name: string;
   shape: Shape;
+  shapeContours: Vec2[][];
+  shapeName: string;
   diameter: number;
   thickness: number;
   inlayDepth: number;
@@ -14,6 +16,7 @@ export interface Project {
   matchBase: string;
   mapping: number[];
   source: string;
+  sourcePalette: string[];
   sourceName: string;
   sample: string;
   artScale: number;
@@ -60,6 +63,8 @@ export const DEFAULT_PROJECT: Project = {
   version: 1,
   name: "Solstice",
   shape: "circle",
+  shapeContours: [],
+  shapeName: "",
   diameter: 100,
   thickness: 4,
   inlayDepth: 0.6,
@@ -69,6 +74,7 @@ export const DEFAULT_PROJECT: Project = {
   matchBase: DEFAULT_COLORS[0],
   mapping: [0, 1, 2, 3],
   source: "",
+  sourcePalette: [],
   sourceName: "Solstice.svg",
   sample: "sunset",
   artScale: 90,

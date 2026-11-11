@@ -1,5 +1,5 @@
 import type { Artwork, Project } from "../types";
-import { artContours, outline } from "./geometry";
+import { artContours, outlines } from "./geometry";
 export type Alignment =
   "left" | "centerX" | "right" | "top" | "centerY" | "bottom" | "center";
 export function alignmentTargets(p: Project, art: Artwork) {
@@ -17,7 +17,8 @@ export function alignmentTargets(p: Project, art: Artwork) {
     minY = Math.min(minY, y);
     maxY = Math.max(maxY, y);
   }
-  const border = outline(p, p.margin),
+  const inset = outlines(p, p.margin).flat();
+  const border = inset.length ? inset : outlines(p).flat(),
     xs = border.map((v) => v[0]),
     ys = border.map((v) => v[1]);
   const left = Math.min(...xs),

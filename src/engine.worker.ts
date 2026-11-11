@@ -10,7 +10,8 @@ self.onmessage = async (e: MessageEvent) => {
   const { id, type, payload } = e.data;
   try {
     if (type === "vectorize") {
-      const { data, width, height, count, base, remove, smooth } = payload;
+      const { data, width, height, count, base, remove, smooth, palette } =
+        payload;
       const result = vectorize(
         data,
         width,
@@ -19,6 +20,7 @@ self.onmessage = async (e: MessageEvent) => {
         base,
         remove,
         smooth,
+        palette,
       );
       self.postMessage({ id, result });
     } else {

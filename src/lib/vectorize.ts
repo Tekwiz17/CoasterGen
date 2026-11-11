@@ -40,6 +40,7 @@ export function vectorize(
   base: string,
   removeBackground: boolean,
   smooth = true,
+  palette?: string[],
 ): Artwork {
   if (!Number.isInteger(count) || count < 2 || count > 8)
     throw new Error("Choose between 2 and 8 total colors.");
@@ -93,23 +94,65 @@ export function vectorize(
       }
     }
   }
-  const hist = new Map<number, { color: RGB; lab: RGB; n: number }>();
+  const hist = new Map<
+    number,
+    { color: RGB; lab: RGB; n: number; core: number; sum: RGB; coreSum: RGB }
+  >();
   for (let i = 0; i < transparent.length; i++)
     if (!transparent[i]) {
       const r = data[i * 4],
         g = data[i * 4 + 1],
-        b = data[i * 4 + 2],
-        key = ((r >> 3) << 10) | ((g >> 3) << 5) | (b >> 3);
-      const e = hist.get(key);
-      if (e) e.n++;
-      else {
+        b = data[i * 4 + 2];
+      const key = ((r >> 3) << 10) | ((g >> 3) << 5) | (b >> 3);
+      let e = hist.get(key);
+      if (!e) {
         const color: RGB = [r, g, b];
-        hist.set(key, { color, lab: lab(color), n: 1 });
+        e = {
+          color,
+          lab: lab(color),
+          n: 0,
+          core: 0,
+          sum: [0, 0, 0],
+          coreSum: [0, 0, 0],
+        };
+        hist.set(key, e);
+      }
+      e.n++;
+      for (let c = 0; c < 3; c++) e.sum[c] += data[i * 4 + c];
+      // Flat interior pixels are reliable palette samples. Edge blends still
+      // contribute to matching, but cannot muddy a solid logo's filament color.
+      const x = i % width,
+        y = Math.floor(i / width);
+      if (
+        x > 0 &&
+        x < width - 1 &&
+        y > 0 &&
+        y < height - 1 &&
+        [-1, 1, -width, width].every(
+          (d) =>
+            !transparent[i + d] &&
+            [0, 1, 2].every(
+              (c) => Math.abs(data[(i + d) * 4 + c] - data[i * 4 + c]) <= 6,
+            ),
+        )
+      ) {
+        e.core++;
+        for (let c = 0; c < 3; c++) e.coreSum[c] += data[i * 4 + c];
       }
     }
+  for (const e of hist.values()) {
+    e.color = e.sum.map((v) => v / e.n) as RGB;
+    e.lab = lab(e.color);
+  }
   const points = Array.from(hist.values());
-  const centers: RGB[] = [lab(rgb(base))],
-    colors: RGB[] = [rgb(base)];
+  if (
+    palette &&
+    (palette.length !== count ||
+      !palette.every((c) => /^#[0-9a-f]{6}$/i.test(c)))
+  )
+    throw new Error("The image palette is invalid.");
+  const colors: RGB[] = palette ? palette.map(rgb) : [rgb(base)],
+    centers: RGB[] = colors.map(lab);
   while (centers.length < count) {
     let best = points[0],
       score = -1;
@@ -137,7 +180,7 @@ export function vectorize(
     });
     return best;
   };
-  for (let it = 0; it < 14; it++) {
+  for (let it = 0; !palette && it < 14; it++) {
     const sums = Array.from({ length: count }, () => [0, 0, 0, 0]);
     for (const p of points) {
       const j = nearest(p.lab);
@@ -149,6 +192,28 @@ export function vectorize(
         colors[j] = sums[j].slice(0, 3).map((x) => x / sums[j][3]) as RGB;
         centers[j] = lab(colors[j]);
       }
+  }
+  if (!palette && smooth) {
+    const coreSums = Array.from({ length: count }, () => [0, 0, 0, 0, 0]);
+    for (const p of points) {
+      const sum = coreSums[nearest(p.lab)];
+      for (let c = 0; c < 3; c++) sum[c] += p.coreSum[c];
+      sum[3] += p.core;
+      sum[4] += p.n;
+    }
+    for (let j = 1; j < count; j++)
+      if (coreSums[j][3] >= Math.max(4, coreSums[j][4] * 0.15)) {
+        colors[j] = coreSums[j]
+          .slice(0, 3)
+          .map((v) => v / coreSums[j][3]) as RGB;
+        centers[j] = lab(colors[j]);
+      }
+  }
+  // Match against the exact palette written into project files, so reloading
+  // or editing the image cannot shift a boundary through RGB rounding.
+  for (let j = 0; j < colors.length; j++) {
+    colors[j] = rgb(hex(colors[j]));
+    centers[j] = lab(colors[j]);
   }
   const lookup = new Map<number, number>();
   for (const [key, p] of hist) lookup.set(key, nearest(p.lab));

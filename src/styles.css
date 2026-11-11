@@ -2087,3 +2087,110 @@ input[type="range"]::-moz-range-thumb {
     max-width: 120px;
   }
 }
+
+/* Outline uploads and image cleanup */
+.custom-shape-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: 12px;
+  flex-wrap: wrap;
+}
+.shape-note {
+  overflow-wrap: anywhere;
+  margin: 8px 0 18px;
+}
+.unit-hint {
+  margin-top: 8px;
+}
+.unit-hint strong {
+  color: var(--green);
+  font-weight: 600;
+}
+.number-wrap input[aria-invalid="true"] {
+  border-color: #b44536;
+}
+.image-cleanup {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+  min-height: 0;
+  display: grid;
+  place-items: center;
+}
+.image-cleanup-frame {
+  position: relative;
+  min-width: 0;
+  min-height: 0;
+}
+.image-cleanup canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+.image-cleanup.erasing canvas {
+  cursor: none;
+  touch-action: none;
+}
+.eraser-cursor {
+  position: absolute;
+  pointer-events: none;
+  border: 1px solid #fff;
+  box-shadow: 0 0 0 1px #174e3c;
+  border-radius: 50%;
+  aspect-ratio: 1;
+  transform: translate(-50%, -50%);
+}
+.cleanup-tools {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+  margin: -8px 0 16px;
+}
+.cleanup-tools .icon-button {
+  width: 32px;
+  height: 32px;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  display: grid;
+  place-items: center;
+  background: white;
+  color: var(--green);
+}
+.cleanup-tools .text-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+.brush-tools {
+  background: #f0f6f1;
+  border-radius: 9px;
+  padding: 12px 14px;
+  margin-bottom: 20px;
+}
+.brush-tools label {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  font-size: 12px;
+  font-weight: 600;
+}
+.brush-tools input {
+  flex: 1;
+  min-width: 80px;
+  accent-color: #22644d;
+}
+.brush-tools p {
+  margin: 7px 0 0;
+  font-size: 11px;
+  line-height: 1.6;
+  color: var(--muted);
+}
+.file-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-shrink: 0;
+}

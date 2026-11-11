@@ -8,6 +8,7 @@ import {
   validate,
   magnetCenters,
   outline,
+  outlines,
 } from "../src/lib/geometry";
 import { vectorize } from "../src/lib/vectorize";
 import { export3mf, exportSvg } from "../src/lib/export";
@@ -456,4 +457,173 @@ test("pixel-art mode retains isolated pixel details and exact square corners", (
     1,
     "Smoothing removes the isolated one-pixel fleck",
   );
+});
+
+test("inch and mm entries convert predictably without accepting invalid dimensions", async () => {
+  const { parseMillimeters: mm } = await import("../src/lib/units");
+  for (const [input, expected] of [
+    ["4in", 101.6],
+    ["4 IN", 101.6],
+    [".25in", 6.35],
+    ["2 inches", 50.8],
+    ['2"', 50.8],
+    ["100", 100],
+    ["100mm", 100],
+    ["-2.5 mm", -2.5],
+  ] as const)
+    assert.equal(mm(input), expected);
+  for (const input of [
+    "",
+    "in",
+    "3cm",
+    "NaN",
+    "Infinity",
+    "4in + 1",
+    "1e309",
+    "1/4in",
+    "12abc",
+  ])
+    assert.equal(mm(input), null);
+});
+
+test("custom SVG outlines preserve holes, true border offsets, watertight geometry and project round trips", async () => {
+  const { cleanShape, shapeError } = await import("../src/lib/shapes");
+  const shapeContours = cleanShape([
+    [
+      [-50, -40],
+      [50, -40],
+      [50, 40],
+      [-50, 40],
+    ],
+    [
+      [-10, -10],
+      [-10, 10],
+      [10, 10],
+      [10, -10],
+    ],
+  ]);
+  assert.equal(shapeError(shapeContours), "");
+  const p = project({
+    shape: "custom",
+    shapeContours,
+    shapeName: "cutout.svg",
+  });
+  const solid = buildModel(api, p, blank),
+    colored = buildModel(api, p, drawing);
+  [...solid.parts, ...colored.parts].forEach(watertight);
+  assert.ok(Math.abs(solid.volume - 7600 * p.thickness) < 0.1);
+  assert.ok(Math.abs(colored.volume - solid.volume) < 0.1);
+  const inset = new api.CrossSection(outlines(p, 3), "EvenOdd");
+  assert.ok(
+    inset.area() < 94 * 74 - 26 * 26 + 10,
+    "The border also expands the inner cutout",
+  );
+  inset.delete();
+  assert.ok(
+    validate({ ...p, magnetMode: "center" }).some((s) => s.includes("edge")),
+    "A pocket cannot lie inside an SVG cutout",
+  );
+  assert.deepEqual(parseProject(p).shapeContours, shapeContours);
+  const svg = new XMLParser({ ignoreAttributes: false }).parse(
+    exportSvg(p, drawing),
+  ).svg;
+  assert.equal(svg.path["@_fill-rule"], "evenodd");
+  assert.equal(svg.defs.clipPath.path["@_clip-rule"], "evenodd");
+  assert.throws(() =>
+    parseProject({
+      ...p,
+      shapeContours: [
+        [
+          [NaN, 1],
+          [2, 3],
+          [4, 5],
+        ],
+      ],
+    }),
+  );
+  assert.throws(() => parseProject({ ...p, shapeContours: [] }));
+  assert.ok(
+    shapeError([
+      [
+        [-50, -30],
+        [-10, -30],
+        [-10, 30],
+        [-50, 30],
+      ],
+      [
+        [10, -30],
+        [50, -30],
+        [50, 30],
+        [10, 30],
+      ],
+    ]).includes("connected"),
+  );
+});
+
+test("erasing a color preserves the remaining source palette and filament slot assignments", () => {
+  const n = 48,
+    data = new Uint8ClampedArray(n * n * 4);
+  for (let y = 4; y < 44; y++)
+    for (let x = 4; x < 44; x++)
+      data.set(
+        x < 24 ? [240, 40, 40, 255] : [20, 70, 220, 255],
+        (y * n + x) * 4,
+      );
+  const before = vectorize(data, n, n, 3, "#FFFFFF", false);
+  const blue = before.sourceColors.findIndex(
+    (c) =>
+      parseInt(c.slice(5, 7), 16) > 150 && parseInt(c.slice(1, 3), 16) < 50,
+  );
+  assert.ok(blue > 0);
+  assert.deepEqual(
+    vectorize(data, n, n, 3, "#FFFFFF", false, true, before.sourceColors),
+    before,
+    "Saved RGB palette produces identical geometry before editing",
+  );
+  const erased = data.slice();
+  for (let y = 0; y < n; y++)
+    for (let x = 0; x < 24; x++) erased[(y * n + x) * 4 + 3] = 0;
+  const after = vectorize(
+    erased,
+    n,
+    n,
+    3,
+    "#FFFFFF",
+    false,
+    true,
+    before.sourceColors,
+  );
+  assert.deepEqual(after.sourceColors, before.sourceColors);
+  assert.equal(after.counts[blue], before.counts[blue]);
+  assert.equal(after.pixels, 800);
+  const saved = parseProject(
+    project({
+      colorCount: 3,
+      colors: before.sourceColors,
+      mapping: [0, 2, 1],
+      sourcePalette: before.sourceColors,
+    }),
+  );
+  assert.deepEqual(saved.sourcePalette, before.sourceColors);
+  assert.throws(() => parseProject({ ...saved, sourcePalette: ["#FFFFFF"] }));
+});
+
+test("antialiasing does not muddy the interior colors of solid artwork", () => {
+  const n = 80,
+    data = new Uint8ClampedArray(n * n * 4).fill(255);
+  for (let y = 0; y < n; y++)
+    for (let x = 0; x < n; x++) {
+      const coverage = Math.max(
+        0,
+        Math.min(1, 28.3 - Math.hypot(x - 39.5, y - 39.5)),
+      );
+      data.set(
+        [18, 110, 202]
+          .map((v) => Math.round(v * coverage + 255 * (1 - coverage)))
+          .concat(255),
+        (y * n + x) * 4,
+      );
+    }
+  const art = vectorize(data, n, n, 2, "#FFFFFF", false, true);
+  assert.equal(art.sourceColors[1], "#126ECA");
 });

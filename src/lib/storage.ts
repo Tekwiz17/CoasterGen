@@ -1,4 +1,5 @@
 import { DEFAULT_PROJECT, type Project } from "../types";
+import { cleanShape, shapeError } from "./shapes";
 const openDB = () =>
   new Promise<IDBDatabase>((resolve, reject) => {
     const r = indexedDB.open("coastergen", 1);
@@ -54,10 +55,19 @@ export function parseProject(value: unknown): Project {
     }
   }
   if (
-    !["circle", "rounded", "hexagon"].includes(p.shape) ||
+    !["circle", "rounded", "hexagon", "custom"].includes(p.shape) ||
     !["none", "center", "outer"].includes(p.magnetMode)
   )
     throw new Error("Invalid coaster or magnet shape.");
+  if (
+    p.shape === "custom" ||
+    (Array.isArray(obj.shapeContours) && obj.shapeContours.length)
+  ) {
+    const error = shapeError(obj.shapeContours);
+    if (error) throw new Error(error);
+    p.shapeContours = cleanShape(obj.shapeContours as Project["shapeContours"]);
+  }
+  p.shapeName = p.shapeName.slice(0, 120);
   if (!Number.isInteger(p.colorCount) || p.colorCount < 2 || p.colorCount > 8)
     throw new Error("Projects must use 2–8 colors.");
   if (
@@ -67,6 +77,18 @@ export function parseProject(value: unknown): Project {
   )
     throw new Error("Invalid project colors.");
   p.colors = obj.colors.slice(0, 8) as string[];
+  if (obj.sourcePalette !== undefined) {
+    if (
+      !Array.isArray(obj.sourcePalette) ||
+      (obj.sourcePalette.length !== 0 &&
+        obj.sourcePalette.length !== p.colorCount) ||
+      !obj.sourcePalette.every(
+        (c) => typeof c === "string" && /^#[0-9a-f]{6}$/i.test(c),
+      )
+    )
+      throw new Error("Invalid image palette.");
+    p.sourcePalette = obj.sourcePalette as string[];
+  }
   if (!/^#[0-9a-f]{6}$/i.test(p.matchBase))
     throw new Error("Invalid artwork matching color.");
   if (

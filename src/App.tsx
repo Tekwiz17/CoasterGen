@@ -36,7 +36,7 @@ import {
 } from "lucide-react";
 import { DEFAULT_PROJECT, type Project } from "./types";
 import { SAMPLES, svgDataUrl } from "./samples";
-import { download, filename, readArtwork } from "./lib/image";
+import { download, filename, readArtwork, readCoasterShape } from "./lib/image";
 import { useCoaster } from "./lib/useCoaster";
 import { alignArtwork, type Alignment } from "./lib/alignment";
 import { magnetCenters } from "./lib/geometry";
@@ -99,6 +99,8 @@ export default function App() {
   const [toast, setToast] = useState("");
   const [dragging, setDragging] = useState(false);
   const [reading, setReading] = useState(false);
+  const [readingShape, setReadingShape] = useState(false);
+  const shapeInput = useRef<HTMLInputElement>(null);
   const [exporting, setExporting] = useState(false);
   const [bambuReady, setBambuReady] = useState(false);
   const fileInput = useRef<HTMLInputElement>(null);
@@ -142,6 +144,21 @@ export default function App() {
       notify((e as Error).message);
     } finally {
       if (id === uploadId.current) setReading(false);
+    }
+  }
+  async function uploadShape(file?: File) {
+    if (!file) return;
+    setReadingShape(true);
+    try {
+      const shapeContours = await readCoasterShape(file);
+      change({ shape: "custom", shapeContours, shapeName: file.name });
+      setView("2d");
+      setBottom(false);
+      notify("Coaster outline updated. Adjust the size below.");
+    } catch (e) {
+      notify((e as Error).message);
+    } finally {
+      setReadingShape(false);
     }
   }
   async function openProject(file?: File) {
@@ -713,6 +730,7 @@ export default function App() {
                             key={id}
                             className={p.shape === id ? "selected" : ""}
                             aria-pressed={p.shape === id}
+                            disabled={readingShape}
                             onClick={() =>
                               change({ shape: id as Project["shape"] })
                             }
@@ -722,9 +740,65 @@ export default function App() {
                           </button>
                         ))}
                       </div>
+                      <input
+                        ref={shapeInput}
+                        type="file"
+                        accept=".svg,image/svg+xml"
+                        aria-label="Upload SVG coaster shape"
+                        hidden
+                        onChange={(e) => {
+                          void uploadShape(e.target.files?.[0]);
+                          e.target.value = "";
+                        }}
+                      />
+                      <div className="custom-shape-row">
+                        <button
+                          className={
+                            "button light small" +
+                            (p.shape === "custom" ? " active" : "")
+                          }
+                          disabled={readingShape}
+                          onClick={() => {
+                            if (p.shapeContours.length && p.shape !== "custom")
+                              change({ shape: "custom" });
+                            else shapeInput.current?.click();
+                          }}
+                        >
+                          {readingShape ? (
+                            <LoaderCircle size={16} className="spin" />
+                          ) : (
+                            <Upload size={16} />
+                          )}
+                          {readingShape
+                            ? "Reading outline…"
+                            : p.shapeContours.length
+                              ? "Custom SVG shape"
+                              : "Upload SVG shape"}
+                        </button>
+                        {p.shapeContours.length > 0 && (
+                          <button
+                            className="text-button"
+                            disabled={readingShape}
+                            onClick={() => shapeInput.current?.click()}
+                          >
+                            Replace SVG
+                          </button>
+                        )}
+                      </div>
+                      <p className="control-note shape-note">
+                        {p.shape === "custom"
+                          ? p.shapeName + " · transparent areas become cutouts."
+                          : "Use a filled SVG with one connected outline."}
+                      </p>
                       <div className="field-grid">
                         <Field
-                          label={p.shape === "circle" ? "Diameter" : "Width"}
+                          label={
+                            p.shape === "custom"
+                              ? "Longest side"
+                              : p.shape === "circle"
+                                ? "Diameter"
+                                : "Width"
+                          }
                           value={p.diameter}
                           min={30}
                           max={250}
@@ -739,6 +813,10 @@ export default function App() {
                           onChange={(thickness) => change({ thickness })}
                         />
                       </div>
+                      <p className="control-note unit-hint">
+                        Sizes use mm. Type <strong>4in</strong> for inches — it
+                        becomes 101.6 mm.
+                      </p>
                       <div className="size-presets">
                         <span>Common sizes</span>
                         {[85, 100, 110].map((n) => (
@@ -823,12 +901,27 @@ export default function App() {
                       </button>
                       <div className="file-chip">
                         <span title={p.sourceName}>{p.sourceName}</span>
-                        <button
-                          className="text-button"
-                          onClick={() => fileInput.current?.click()}
-                        >
-                          Replace
-                        </button>
+                        <div className="file-actions">
+                          {p.source && (
+                            <button
+                              className="text-button"
+                              onClick={() =>
+                                setPendingImage({
+                                  source: p.source,
+                                  name: p.sourceName,
+                                })
+                              }
+                            >
+                              Edit / erase
+                            </button>
+                          )}
+                          <button
+                            className="text-button"
+                            onClick={() => fileInput.current?.click()}
+                          >
+                            Replace
+                          </button>
+                        </div>
                       </div>
                       <ColorCount
                         value={p.colorCount}

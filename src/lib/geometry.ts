@@ -1,6 +1,20 @@
 import type { ManifoldToplevel, CrossSection, Manifold } from "manifold-3d";
 import type { Project, Artwork, Vec2, ModelData, MeshPart } from "../types";
+import { insetShape, fitsPocket } from "./shapes";
+export function outlines(p: Project, inset = 0): Vec2[][] {
+  if (p.shape !== "custom") return [outline(p, inset)];
+  return insetShape(
+    p.shapeContours.map((loop) =>
+      loop.map(([x, y]): Vec2 => [
+        (x * p.diameter) / 100,
+        (y * p.diameter) / 100,
+      ]),
+    ),
+    inset,
+  );
+}
 export function outline(p: Project, inset = 0): Vec2[] {
+  if (p.shape === "custom") return outlines(p, inset)[0] ?? [];
   const r = p.diameter / 2 - inset;
   if (p.shape === "circle")
     return Array.from({ length: 256 }, (_, i) => {
@@ -56,6 +70,14 @@ export function validate(p: Project): string[] {
     p.margin >= p.diameter / 2 - 2
   )
     errors.push("The border must leave room for your artwork.");
+  if (p.shape === "custom") {
+    if (!p.shapeContours.length)
+      errors.push("Upload an SVG for your custom coaster shape.");
+    else if (!outlines(p, p.margin).length)
+      errors.push(
+        "The border is too wide for this outline. Reduce the border.",
+      );
+  }
   if (p.magnetMode !== "none") {
     const pocket = p.magnetDiameter + p.clearance,
       depth = p.magnetDepth + 0.1;
@@ -80,8 +102,10 @@ export function validate(p: Project): string[] {
         "The edge gap leaves no room for outer magnets. Reduce the gap or magnet diameter.",
       );
     if (
-      centers.some(
-        ([x, y]) => Math.hypot(x, y) + pocket / 2 > inradius - 0.8,
+      centers.some(([x, y]) =>
+        p.shape === "custom"
+          ? !fitsPocket(outlines(p), x, y, pocket / 2 + 0.8)
+          : Math.hypot(x, y) + pocket / 2 > inradius - 0.8,
       ) ||
       (p.magnetMode === "outer" && p.edgeGap < 0.8)
     )
@@ -136,8 +160,8 @@ export function buildModel(
   const { CrossSection: CS, Manifold: M } = api;
   const parts: MeshPart[] = [];
   try {
-    const outer = keep(new CS([outline(p)], "EvenOdd"));
-    const clip = keep(new CS([outline(p, p.margin)], "EvenOdd"));
+    const outer = keep(new CS(outlines(p), "EvenOdd"));
+    const clip = keep(new CS(outlines(p, p.margin), "EvenOdd"));
     const contours = artContours(p, art);
     let occupied = keep(CS.square(0));
     const regions: Array<{ section: CrossSection; colorIndex: number }> = [];

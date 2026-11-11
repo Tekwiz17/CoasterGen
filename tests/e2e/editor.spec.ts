@@ -343,3 +343,252 @@ test("reselecting the current example restores its matched colors and survives r
     page.getByLabel("Filament 2 color", { exact: true }),
   ).toHaveValue(original);
 });
+
+test("size fields accept inches, plain mm, corrections and keyboard stepping", async ({
+  page,
+}) => {
+  await open(page);
+  const size = page.getByRole("spinbutton", { name: "Diameter", exact: true });
+  await size.fill("4in");
+  await size.press("Enter");
+  await expect(size).toHaveValue("101.6");
+  await ready(page);
+  await size.fill("95");
+  await size.press("Tab");
+  await expect(size).toHaveValue("95");
+  await ready(page);
+  await size.fill("3.5 in");
+  await size.press("Tab");
+  await expect(size).toHaveValue("88.9");
+  await ready(page);
+  await size.fill("bad");
+  await size.press("Enter");
+  await expect(size).toHaveAttribute("aria-invalid", "true");
+  await size.press("Escape");
+  await expect(size).toHaveValue("88.9");
+  await size.focus();
+  await size.press("ArrowUp");
+  await size.press("Tab");
+  await expect(size).toHaveValue("89.9");
+  await ready(page);
+  const saved = page.waitForEvent("download");
+  await page.getByRole("button", { name: "Save project", exact: true }).click();
+  expect(
+    JSON.parse(await readFile((await (await saved).path())!, "utf8")).diameter,
+  ).toBe(89.9);
+  await fits(page);
+});
+
+test("uploaded SVG shape keeps cutouts through export, save and reload; invalid shapes preserve the coaster", async ({
+  page,
+}) => {
+  const errors: string[] = [];
+  page.on("pageerror", (e) => errors.push(e.message));
+  await open(page);
+  const input = page.getByLabel("Upload SVG coaster shape", { exact: true });
+  await input.setInputFiles({
+    name: "cutout.svg",
+    mimeType: "image/svg+xml",
+    buffer: Buffer.from(
+      '<svg xmlns="http://www.w3.org/2000/svg" width="100" height="80"><path fill="#174e3c" fill-rule="evenodd" d="M0 0h100v80H0z M40 30h20v20H40z"/></svg>',
+    ),
+  });
+  await expect(
+    page.getByRole("spinbutton", { name: "Longest side", exact: true }),
+  ).toBeVisible();
+  await ready(page);
+  const before = await page
+    .locator(".viewport .flat-view > g > path")
+    .first()
+    .getAttribute("d");
+  expect(before?.match(/M/g)?.length).toBe(2);
+  await input.setInputFiles({
+    name: "empty.svg",
+    mimeType: "image/svg+xml",
+    buffer: Buffer.from(
+      '<svg xmlns="http://www.w3.org/2000/svg" width="100" height="100"/>',
+    ),
+  });
+  await expect(
+    page.getByText("This SVG is empty.", { exact: false }),
+  ).toBeVisible();
+  expect(
+    await page
+      .locator(".viewport .flat-view > g > path")
+      .first()
+      .getAttribute("d"),
+  ).toBe(before);
+  const saved = page.waitForEvent("download");
+  await page.getByRole("button", { name: "Save project", exact: true }).click();
+  const p = JSON.parse(await readFile((await (await saved).path())!, "utf8"));
+  expect(p.shape).toBe("custom");
+  expect(p.shapeContours).toHaveLength(2);
+  await printStep(page);
+  const download = page.waitForEvent("download");
+  await page.getByRole("button", { name: "Download 3MF", exact: true }).click();
+  const files = unzipSync(await readFile((await (await download).path())!));
+  expect(JSON.parse(strFromU8(files["Metadata/coastergen.json"])).shape).toBe(
+    "custom",
+  );
+  await expect(
+    page.getByText("Saved on this device", { exact: true }),
+  ).toBeVisible();
+  await page.reload();
+  await ready(page);
+  await expect(
+    page.getByRole("spinbutton", { name: "Longest side", exact: true }),
+  ).toBeVisible();
+  expect(
+    await page
+      .locator(".viewport .flat-view > g > path")
+      .first()
+      .getAttribute("d"),
+  ).toBe(before);
+  expect(errors).toEqual([]);
+  await fits(page);
+});
+
+test("eraser removes pixels, supports undo and reset, and preserves the palette after reload", async ({
+  page,
+}) => {
+  test.setTimeout(120000);
+  const errors: string[] = [];
+  page.on("pageerror", (e) => errors.push(e.message));
+  await open(page);
+  await page.getByLabel("Import artwork file", { exact: true }).setInputFiles({
+    name: "cleanup.svg",
+    mimeType: "image/svg+xml",
+    buffer: Buffer.from(
+      '<svg xmlns="http://www.w3.org/2000/svg" width="120" height="80"><path fill="#de3333" d="M0 0h60v80H0z"/><path fill="#2255cc" d="M60 0h60v80H60z"/></svg>',
+    ),
+  });
+  const modal = page.getByRole("dialog"),
+    apply = modal.getByRole("button", { name: "Use this image", exact: true });
+  await expect(apply).toBeEnabled();
+  await modal.getByLabel("Filament 2 color", { exact: true }).fill("#00aa55");
+  await modal
+    .getByRole("button", { name: "Erase unwanted areas", exact: true })
+    .click();
+  await modal
+    .getByRole("slider", { name: "Eraser size", exact: true })
+    .fill("12");
+  const eraser = modal.getByRole("img", {
+    name: "Image eraser.",
+    exact: false,
+  });
+  await expect(eraser).toBeVisible();
+  await expect
+    .poll(async () =>
+      eraser.evaluate((el) => {
+        const a = el.getBoundingClientRect(),
+          b = el.closest(".image-checker")!.getBoundingClientRect();
+        return (
+          a.width > 0 &&
+          a.height > 0 &&
+          a.left >= b.left &&
+          a.right <= b.right &&
+          a.top >= b.top &&
+          a.bottom <= b.bottom
+        );
+      }),
+    )
+    .toBe(true);
+  async function erase() {
+    const rect = await eraser.boundingBox();
+    expect(rect).toBeTruthy();
+    const x = rect!.x + rect!.width * 0.8,
+      y = rect!.y + rect!.height * 0.5;
+    if (test.info().project.name === "mobile") await page.touchscreen.tap(x, y);
+    else {
+      await page.mouse.move(x, y);
+      await page.mouse.down();
+      await page.mouse.move(x + 1, y + 1);
+      await page.mouse.up();
+    }
+    await expect(apply).toBeEnabled();
+    await expect(
+      modal.getByRole("button", { name: "Undo erasing", exact: true }),
+    ).toBeEnabled();
+  }
+  await erase();
+  await modal
+    .getByRole("button", { name: "Undo erasing", exact: true })
+    .click();
+  await expect(
+    modal.getByRole("button", { name: "Undo erasing", exact: true }),
+  ).toBeDisabled();
+  await expect(apply).toBeEnabled();
+  await erase();
+  await modal
+    .getByRole("button", { name: "Reset erasing", exact: true })
+    .click();
+  await expect(
+    modal.getByRole("button", { name: "Reset erasing", exact: true }),
+  ).toBeDisabled();
+  await expect(apply).toBeEnabled();
+  await erase();
+  await expect(
+    modal.getByLabel("Filament 2 color", { exact: true }),
+  ).toHaveValue("#00aa55");
+  await fits(page);
+  await apply.click();
+  await ready(page);
+  const saved = page.waitForEvent("download");
+  await page.getByRole("button", { name: "Save project", exact: true }).click();
+  const p = JSON.parse(await readFile((await (await saved).path())!, "utf8"));
+  expect(p.source).toMatch(/^data:image\/png;base64,/);
+  expect(p.sourcePalette).toHaveLength(p.colorCount);
+  const alpha = await page.evaluate(async (source: string) => {
+    const image = new Image();
+    image.src = source;
+    await image.decode();
+    const c = document.createElement("canvas");
+    c.width = image.width;
+    c.height = image.height;
+    const ctx = c.getContext("2d")!;
+    ctx.drawImage(image, 0, 0);
+    return [
+      ctx.getImageData(
+        Math.floor(image.width * 0.8),
+        Math.floor(image.height * 0.5),
+        1,
+        1,
+      ).data[3],
+      ctx.getImageData(
+        Math.floor(image.width * 0.2),
+        Math.floor(image.height * 0.5),
+        1,
+        1,
+      ).data[3],
+    ];
+  }, p.source);
+  expect(alpha).toEqual([0, 255]);
+  await expect(
+    page.getByText("Saved on this device", { exact: true }),
+  ).toBeVisible();
+  await page.reload();
+  await ready(page);
+  await page.getByRole("tab", { name: "Image & colors", exact: true }).click();
+  await expect(
+    page.getByLabel("Filament 2 color", { exact: true }),
+  ).toHaveValue("#00aa55");
+  await page.getByRole("button", { name: "Zoom in", exact: true }).click();
+  await ready(page);
+  await page.getByRole("button", { name: "Edit / erase", exact: true }).click();
+  const editDialog = page.getByRole("dialog");
+  await expect(
+    editDialog.getByRole("button", { name: "Use this image", exact: true }),
+  ).toBeEnabled();
+  await expect(
+    editDialog.getByLabel("Filament 2 color", { exact: true }),
+  ).toHaveValue("#00aa55");
+  await editDialog
+    .getByRole("button", { name: "Use this image", exact: true })
+    .click();
+  await ready(page);
+  await expect(page.getByLabel("Image scale", { exact: true })).toHaveText(
+    "95%",
+  );
+  expect(errors).toEqual([]);
+  await fits(page);
+});

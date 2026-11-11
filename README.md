@@ -36,6 +36,12 @@ Vercel uses the Vite preset and `dist` output. No environment variables, databas
 - Local autosave in IndexedDB, portable project files, and undo/redo. No hosted database.
 - Fonts and WASM ship with the app. No analytics or third-party processing requests.
 
+Custom shapes: in **Size**, choose **Upload SVG shape**. The filled silhouette becomes the base, and transparent holes become cutouts. The SVG must form one connected piece; disconnected islands are rejected. The longest side sets the size in mm, with aspect ratio preserved. Outlines are traced at 768 pixels and their borders are offset geometrically, including around holes. Custom outlines and names are included in saved projects.
+
+Image cleanup: in the import dialog, choose **Erase unwanted areas**, set the brush size, and drag on the mapped image. Undo restores the last stroke; reset restores the image at the start of this editing session. Erased pixels become transparent, revealing the base. The source palette stays fixed while erasing, including after saving and reopening a project. Use **Edit / erase** to reopen an imported image while keeping its size, position, and filament assignments. Edited images are embedded locally as PNGs at up to 1024 pixels on the longest edge.
+
+Dimensions accept bare numbers or `mm` as millimeters. A suffix such as `4in`, `4 inches`, or `4"` converts on Enter or leaving the field (4 inches = 101.6 mm). All model and export dimensions remain in mm.
+
 ## Bambu Studio
 
 3MF exports contain standard base-material colors and a multipart component assembly, plus Bambu `Metadata/model_settings.config` part/extruder assignments and `Metadata/project_settings.config` filament color arrays. They do **not** contain printer-specific slicing settings or G-code. Open the 3MF **as a project**, choose your own printer/material/process, and map filament slots to your AMS before slicing. Import behavior varies by slicer version; the app does not claim that a print has been sliced or physically test-printed.
@@ -48,7 +54,7 @@ Artwork is rasterized at 192, 320, 512 (default), or 768 pixels on its longest e
 
 ## Stack
 
-React, TypeScript, Vite, Three.js, Manifold WASM, fit-curve, fflate, Lucide, and self-hosted DM Sans. Source code is in `src/`; the compute worker is `src/engine.worker.ts`.
+React, TypeScript, Vite, Three.js, Manifold WASM, Clipper, fit-curve, fflate, Lucide, and self-hosted DM Sans. Source code is in `src/`; the compute worker is `src/engine.worker.ts`.
 
 Keyboard shortcuts: ⌘/Ctrl+Z undo; ⌘/Ctrl+Shift+Z redo; ⌘/Ctrl+S save a project copy; F fit the preview.
 

@@ -33,11 +33,13 @@ export const artworkKey = (p: Project) =>
     p.removeBackground,
     p.detail,
     p.smoothEdges,
+    p.sourcePalette,
   ]);
 const geometryKey = (p: Project, key: string) =>
   JSON.stringify([
     key,
     p.shape,
+    p.shape === "custom" ? p.shapeContours : null,
     p.diameter,
     p.thickness,
     p.inlayDepth,
@@ -105,6 +107,7 @@ export function useCoaster() {
     checkpoint();
     let next = { ...current.current, ...patch };
     if (match) {
+      next.sourcePalette = [];
       autoMatch.current = true;
       if (traced?.key === artworkKey(next)) {
         next = {
@@ -236,6 +239,10 @@ export function useCoaster() {
           base: snapshot.matchBase,
           remove: snapshot.removeBackground,
           smooth: snapshot.smoothEdges,
+          palette:
+            snapshot.sourcePalette.length === snapshot.colorCount
+              ? snapshot.sourcePalette
+              : undefined,
         });
         if (!active || artworkKey(current.current) !== key) return;
         if (autoMatch.current) {

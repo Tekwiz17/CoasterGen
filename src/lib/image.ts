@@ -1,4 +1,6 @@
 import type { Project } from "../types";
+import { vectorizeImage } from "./engine";
+import { normalizeShape } from "./shapes";
 export async function loadPixels(source: string, detail: number) {
   const image = new Image();
   image.decoding = "async";
@@ -102,3 +104,21 @@ export const filename = (p: Project) =>
     .replace(/[^a-z0-9_-]+/gi, "-")
     .replace(/^-|-$/g, "")
     .toLowerCase() || "my-coaster";
+
+export async function readCoasterShape(file: File) {
+  if (!/\.svg$/i.test(file.name))
+    throw new Error("Choose an SVG file for the coaster outline.");
+  const source = await readArtwork(file);
+  const pixels = await loadPixels(source, 768);
+  // Only the silhouette matters; preserve transparency, holes, and cutouts.
+  for (let i = 0; i < pixels.data.length; i += 4)
+    pixels.data[i] = pixels.data[i + 1] = pixels.data[i + 2] = 0;
+  const art = await vectorizeImage({
+    ...pixels,
+    count: 2,
+    base: "#FFFFFF",
+    remove: false,
+    smooth: true,
+  });
+  return normalizeShape(art.loops.flat(), pixels.height);
+}

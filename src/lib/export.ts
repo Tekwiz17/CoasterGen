@@ -1,6 +1,6 @@
 import { strToU8, zipSync } from "fflate";
 import type { Artwork, ModelData, Project } from "../types";
-import { artContours, outline, pathData } from "./geometry";
+import { artContours, outlines, pathData } from "./geometry";
 const xml = (s: string) =>
   s.replace(
     /[<>&"']/g,
@@ -80,10 +80,10 @@ export function export3mf(
 }
 export function exportSvg(p: Project, art: Artwork): string {
   const r = p.diameter / 2,
-    outer = pathData([outline(p)]),
-    clip = pathData([outline(p, p.margin)]),
+    outer = pathData(outlines(p)),
+    clip = pathData(outlines(p, p.margin)),
     contours = artContours(p, art);
-  return `<?xml version="1.0" encoding="UTF-8"?><svg xmlns="http://www.w3.org/2000/svg" width="${p.diameter}mm" height="${p.diameter}mm" viewBox="${-r} ${-r} ${p.diameter} ${p.diameter}"><title>${xml(p.name)}</title><defs><clipPath id="art-area"><path d="${clip}"/></clipPath></defs><path d="${outer}" fill="${p.colors[0]}"/><g clip-path="url(#art-area)">${contours.map((loops, i) => ((p.mapping[i] ?? i) === 0 ? "" : `<path fill="${p.colors[p.mapping[i] ?? i]}" fill-rule="evenodd" d="${pathData(loops)}"/>`)).join("")}</g></svg>`;
+  return `<?xml version="1.0" encoding="UTF-8"?><svg xmlns="http://www.w3.org/2000/svg" width="${p.diameter}mm" height="${p.diameter}mm" viewBox="${-r} ${-r} ${p.diameter} ${p.diameter}"><title>${xml(p.name)}</title><defs><clipPath id="art-area"><path d="${clip}" clip-rule="evenodd"/></clipPath></defs><path d="${outer}" fill-rule="evenodd" fill="${p.colors[0]}"/><g clip-path="url(#art-area)">${contours.map((loops, i) => ((p.mapping[i] ?? i) === 0 ? "" : `<path fill="${p.colors[p.mapping[i] ?? i]}" fill-rule="evenodd" d="${pathData(loops)}"/>`)).join("")}</g></svg>`;
 }
 export function exportStl(model: ModelData): ArrayBuffer {
   const buffer = new ArrayBuffer(84 + model.triangles * 50),
