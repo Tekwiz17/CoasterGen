@@ -1047,3 +1047,41 @@ test("fill changes one island; crop resets safely and Center saves zero offsets"
   expect(ratio).toBeCloseTo(0.75, 2);
   await fits(page);
 });
+
+test("MakerWorld export downloads a colored model and offers copyable credit", async ({
+  page,
+}) => {
+  await open(page);
+  await page.context().route("https://makerworld.com/**", (route) =>
+    route.fulfill({
+      status: 200,
+      contentType: "text/html",
+      body: "<h1>MakerWorld upload</h1>",
+    }),
+  );
+  await printStep(page);
+  const popup = page.context().waitForEvent("page"),
+    file = page.waitForEvent("download");
+  await page
+    .getByRole("button", { name: "Export to MakerWorld", exact: true })
+    .click();
+  const target = await popup;
+  await target.waitForLoadState();
+  expect(target.url()).toBe(
+    "https://makerworld.com/en/my/models/publish?type=original",
+  );
+  const files = unzipSync(await readFile((await (await file).path())!));
+  expect(strFromU8(files["3D/3dmodel.model"])).toContain("<mesh>");
+  const modal = page.getByRole("dialog");
+  await expect(
+    modal.getByLabel("CoasterGen description credit", { exact: true }),
+  ).toHaveValue(/Made with CoasterGen.*https:\/\/coastergen.vercel.app\//);
+  await expect(
+    modal.getByRole("button", { name: "Copy credit text", exact: true }),
+  ).toBeEnabled();
+  await expect(
+    modal.getByRole("link", { name: /Open MakerWorld/ }),
+  ).toHaveAttribute("rel", "noopener noreferrer");
+  await fits(page);
+  await target.close();
+});

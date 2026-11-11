@@ -55,7 +55,11 @@ import Modal from "./components/Modal";
 import Tutorial from "./components/Tutorial";
 const ModelViewer = lazy(() => import("./components/ModelViewer"));
 type Tab = "coaster" | "artwork" | "magnets" | "print";
-type Dialog = "tutorial" | "export" | "bambu" | "reset" | null;
+const MAKERWORLD_URL =
+  "https://makerworld.com/en/my/models/publish?type=original";
+const MAKERWORLD_CREDIT =
+  "Made with CoasterGen — a free, browser-based tool for creating custom multicolor 3D-printed coasters. Make your own: https://coastergen.vercel.app/";
+type Dialog = "tutorial" | "export" | "bambu" | "makerworld" | "reset" | null;
 const alignmentButtons = [
   { id: "left", label: "Align left", Icon: AlignHorizontalJustifyStart },
   {
@@ -91,6 +95,7 @@ export default function App() {
   const [bottom, setBottom] = useState(false);
   const [zoom, setZoom] = useState(1);
   const [reset, setReset] = useState(0);
+  const [creditCopied, setCreditCopied] = useState(false);
   const [dialog, setDialog] = useState<Dialog>(null);
   const [pendingImage, setPendingImage] = useState<{
     source: string;
@@ -325,6 +330,17 @@ export default function App() {
       notify("Export failed: " + (e as Error).message);
     } finally {
       setExporting(false);
+    }
+  }
+  function exportMakerWorld() {
+    if (!canExport || !model || exporting) return;
+    try {
+      download(export3mf(p, model), filename(p) + ".3mf", "model/3mf");
+      setCreditCopied(false);
+      setDialog("makerworld");
+      window.open(MAKERWORLD_URL, "_blank", "noopener,noreferrer");
+    } catch (e) {
+      notify("Export failed: " + (e as Error).message);
     }
   }
   const usedColors = model
@@ -1295,6 +1311,19 @@ export default function App() {
                         <ArrowUpRight size={14} />
                       </button>
                     </div>
+                    <button
+                      className="button light full"
+                      disabled={!canExport || exporting}
+                      onClick={exportMakerWorld}
+                    >
+                      <img
+                        src="/makerworld.svg"
+                        alt=""
+                        width="22"
+                        height="22"
+                      />
+                      Export to MakerWorld <ArrowUpRight size={14} />
+                    </button>
                     <p className="control-note">
                       3MF includes your colors and magnet pockets. Select your
                       printer and filament slots in your slicer.
@@ -1469,6 +1498,52 @@ export default function App() {
               3MF downloaded. Open it in Studio to continue.
             </p>
           )}
+        </Modal>
+      )}
+      {dialog === "makerworld" && (
+        <Modal title="Share on MakerWorld" onClose={() => setDialog(null)}>
+          <p className="modal-lead">
+            Your 3MF has been downloaded. Upload it on MakerWorld, then paste
+            this credit into your description.
+          </p>
+          <label className="field">
+            <span>Description credit</span>
+            <textarea
+              aria-label="CoasterGen description credit"
+              readOnly
+              rows={4}
+              value={MAKERWORLD_CREDIT}
+              onFocus={(e) => e.currentTarget.select()}
+            />
+          </label>
+          <div className="modal-actions">
+            <button
+              className="button primary"
+              onClick={async () => {
+                try {
+                  await navigator.clipboard.writeText(MAKERWORLD_CREDIT);
+                  setCreditCopied(true);
+                } catch {
+                  notify("Select the credit text above and copy it manually.");
+                }
+              }}
+            >
+              {creditCopied ? "Copied!" : "Copy credit text"}
+            </button>
+            <a
+              className="button light"
+              href={MAKERWORLD_URL}
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              Open MakerWorld <ArrowUpRight size={14} />
+            </a>
+          </div>
+          <p className="control-note" role="status">
+            {creditCopied
+              ? "Credit copied. Paste it into your MakerWorld description."
+              : "If the new tab did not open, use Open MakerWorld. You’ll finish the upload there."}
+          </p>
         </Modal>
       )}
       {dialog === "reset" && (
