@@ -1,9 +1,10 @@
 import { useEffect, useRef, useState, type PointerEvent } from "react";
 import { Minus, Plus, Maximize, Hand, Paintbrush } from "lucide-react";
 import type { Artwork } from "../types";
+import { connectedArea } from "../lib/regions";
 import { loadPixels } from "../lib/image";
 import { loadCleanupMask } from "../lib/cleanup";
-export type CleanupTool = "paint" | "erase" | "restore";
+export type CleanupTool = "paint" | "fill" | "erase" | "restore";
 type Point = { x: number; y: number };
 interface Props {
   source: string;
@@ -273,6 +274,22 @@ export default function ImageCleanup({
     }
     stroke.current = pt;
   }
+  function fill(pt: Point) {
+    const s = surface.current;
+    if (!s || !canvas.current) return;
+    const area = connectedArea(s.view.data, s.width, s.height, pt.x, pt.y);
+    if (!area.length) return;
+    const color = rgb(colors[Math.min(slot, colors.length - 1)]);
+    for (const i of area) {
+      s.codes.data.set([slot + 1, 0, 0, 255], i * 4);
+      s.view.data.set([...color, 255], i * 4);
+    }
+    s.maskCanvas.getContext("2d")!.putImageData(s.codes, 0, 0);
+    canvas.current.getContext("2d")!.putImageData(s.view, 0, 0);
+    emittedMask.current = s.maskCanvas.toDataURL("image/png");
+    publish(true);
+    onEdit(emittedMask.current);
+  }
   function finish(commit: boolean) {
     if (panStart.current) {
       panStart.current = null;
@@ -295,11 +312,13 @@ export default function ImageCleanup({
   const label = active
     ? moving
       ? "Image cleanup. Drag to move the zoomed image."
-      : tool === "erase"
-        ? "Image eraser. Drag over unwanted pixels to remove them."
-        : tool === "restore"
-          ? "Restore automatic colors. Drag to remove brush corrections."
-          : "Image paint brush. Drag to paint with the selected filament."
+      : tool === "fill"
+        ? "Fill area. Choose a filament, then click one connected color area."
+        : tool === "erase"
+          ? "Image eraser. Drag over unwanted pixels to remove them."
+          : tool === "restore"
+            ? "Restore automatic colors. Drag to remove brush corrections."
+            : "Image paint brush. Drag to paint with the selected filament."
     : "Original uploaded image";
   return (
     <div className={"cleanup-stage" + (active ? " is-active" : "")}>
@@ -327,6 +346,10 @@ export default function ImageCleanup({
               e.preventDefault();
               e.currentTarget.focus();
               e.currentTarget.setPointerCapture(e.pointerId);
+              if (tool === "fill" && !moving && !e.altKey) {
+                fill(point(e));
+                return;
+              }
               onBusy(true);
               if (moving || e.altKey)
                 panStart.current = {
@@ -393,23 +416,29 @@ export default function ImageCleanup({
                 e.key === "Backspace"
               ) {
                 e.preventDefault();
-                draw(pt, e.key === " " ? undefined : 255);
+                if (tool === "fill" && e.key === " ") fill(pt);
+                else draw(pt, e.key === " " ? undefined : 255);
                 finish(true);
               }
             }}
           />
-          {active && !moving && cursor && loaded && surface.current && (
-            <span
-              className="eraser-cursor"
-              aria-hidden="true"
-              style={{
-                left: `${(cursor.x / surface.current.width) * 100}%`,
-                top: `${(cursor.y / surface.current.height) * 100}%`,
-                width: `${(((size / Math.max(artwork?.width ?? 1, artwork?.height ?? 1)) * Math.max(surface.current.width, surface.current.height)) / surface.current.width) * 100}%`,
-                borderColor: tool === "paint" ? colors[slot] : "#fff",
-              }}
-            />
-          )}
+          {active &&
+            tool !== "fill" &&
+            !moving &&
+            cursor &&
+            loaded &&
+            surface.current && (
+              <span
+                className="eraser-cursor"
+                aria-hidden="true"
+                style={{
+                  left: `${(cursor.x / surface.current.width) * 100}%`,
+                  top: `${(cursor.y / surface.current.height) * 100}%`,
+                  width: `${(((size / Math.max(artwork?.width ?? 1, artwork?.height ?? 1)) * Math.max(surface.current.width, surface.current.height)) / surface.current.width) * 100}%`,
+                  borderColor: tool === "paint" ? colors[slot] : "#fff",
+                }}
+              />
+            )}
         </div>
         {failure && <span role="alert">{failure}</span>}
       </div>

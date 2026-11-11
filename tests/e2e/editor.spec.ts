@@ -615,6 +615,7 @@ test("live multicolor painting survives remapping, save/reload, restore, zoom an
   await modal
     .getByRole("button", { name: "Paint & erase", exact: true })
     .click();
+  await modal.getByRole("button", { name: "Paint", exact: true }).click();
   await modal
     .getByRole("slider", { name: "Brush size", exact: true })
     .fill("40");
@@ -953,5 +954,96 @@ test("blank white template exports and Quality applies its four settings", async
   await expect(
     modal.getByRole("button", { name: "Quality", exact: true }),
   ).toHaveAttribute("aria-pressed", "false");
+  await fits(page);
+});
+
+test("fill changes one island; crop resets safely and Center saves zero offsets", async ({
+  page,
+}) => {
+  test.setTimeout(120000);
+  await open(page);
+  await page.getByLabel("Import artwork file", { exact: true }).setInputFiles({
+    name: "islands.svg",
+    mimeType: "image/svg+xml",
+    buffer: Buffer.from(
+      '<svg xmlns="http://www.w3.org/2000/svg" width="120" height="80"><path fill="#112244" d="M0 0h120v80H0z"/><path fill="#ee3333" d="M10 20h30v40H10zM80 20h30v40H80z"/></svg>',
+    ),
+  });
+  const modal = page.getByRole("dialog"),
+    apply = modal.getByRole("button", { name: "Use this image", exact: true });
+  await expect(apply).toBeEnabled({ timeout: 30000 });
+  await modal
+    .getByRole("button", { name: "Paint & erase", exact: true })
+    .click();
+  await modal.getByRole("button", { name: "Fill area", exact: true }).click();
+  await modal.getByRole("button", { name: /Paint with filament 2/ }).click();
+  const canvas = modal.getByRole("img", { name: /Fill area/ });
+  await canvas.scrollIntoViewIfNeeded();
+  const b = (await canvas.boundingBox())!;
+  if (test.info().project.name === "mobile")
+    await page.touchscreen.tap(b.x + b.width * 0.2, b.y + b.height * 0.5);
+  else await page.mouse.click(b.x + b.width * 0.2, b.y + b.height * 0.5);
+  await expect(
+    modal.getByRole("button", { name: "Undo cleanup", exact: true }),
+  ).toBeEnabled();
+  await expect(apply).toBeEnabled({ timeout: 30000 });
+  await apply.click();
+  await ready(page);
+  const savedEvent = page.waitForEvent("download");
+  await page.getByRole("button", { name: "Save project", exact: true }).click();
+  const saved = JSON.parse(
+    await readFile((await (await savedEvent).path())!, "utf8"),
+  );
+  const samples = await page.evaluate(async (mask) => {
+    const img = new Image();
+    img.src = mask;
+    await img.decode();
+    const c = document.createElement("canvas");
+    c.width = img.width;
+    c.height = img.height;
+    const ctx = c.getContext("2d")!;
+    ctx.drawImage(img, 0, 0);
+    return [0.2, 0.8].map(
+      (x) =>
+        ctx.getImageData(
+          Math.floor(c.width * x),
+          Math.floor(c.height * 0.5),
+          1,
+          1,
+        ).data[0],
+    );
+  }, saved.cleanupMask);
+  expect(samples).toEqual([2, 0]);
+  await page.getByRole("tab", { name: "Image & colors", exact: true }).click();
+  await page.getByRole("button", { name: "Center", exact: true }).click();
+  await page.getByRole("button", { name: "Edit / erase", exact: true }).click();
+  await expect(apply).toBeEnabled({ timeout: 30000 });
+  await modal.getByRole("button", { name: "Crop image", exact: true }).click();
+  await modal.getByLabel("Crop width", { exact: true }).fill("50");
+  await modal.getByRole("button", { name: "Apply crop", exact: true }).click();
+  await expect(apply).toBeEnabled({ timeout: 30000 });
+  await modal.getByRole("button", { name: "Reset crop", exact: true }).click();
+  await expect(apply).toBeEnabled({ timeout: 30000 });
+  await modal.getByRole("button", { name: "Crop image", exact: true }).click();
+  await modal.getByLabel("Crop width", { exact: true }).fill("50");
+  await modal.getByRole("button", { name: "Apply crop", exact: true }).click();
+  await expect(apply).toBeEnabled({ timeout: 30000 });
+  await apply.click();
+  await ready(page);
+  const event = page.waitForEvent("download");
+  await page.getByRole("button", { name: "Save project", exact: true }).click();
+  const cropped = JSON.parse(
+    await readFile((await (await event).path())!, "utf8"),
+  );
+  expect([cropped.artX, cropped.artY]).toEqual([0, 0]);
+  expect(cropped.cleanupMask).toBe("");
+  expect(cropped.colors).toEqual(saved.colors);
+  const ratio = await page.evaluate(async (source) => {
+    const i = new Image();
+    i.src = source;
+    await i.decode();
+    return i.width / i.height;
+  }, cropped.source);
+  expect(ratio).toBeCloseTo(0.75, 2);
   await fits(page);
 });

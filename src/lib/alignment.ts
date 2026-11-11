@@ -46,8 +46,8 @@ export function alignArtwork(
   p: Project,
   art: Artwork,
 ): Partial<Project> {
+  if (alignment === "center") return { artX: 0, artY: 0 };
   const t = alignmentTargets(p, art);
-  if (alignment === "center") return { artX: t.centerX, artY: t.centerY };
   return ["left", "centerX", "right"].includes(alignment)
     ? { artX: t[alignment as "left" | "centerX" | "right"] }
     : { artY: t[alignment as "top" | "centerY" | "bottom"] };

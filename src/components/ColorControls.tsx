@@ -1,5 +1,5 @@
 import { ArrowRight } from "lucide-react";
-import { colorName, type Artwork } from "../types";
+import { type Artwork } from "../types";
 export function ColorCount({
   value,
   onChange,
@@ -107,7 +107,7 @@ export function ColorMapping({
             >
               {colors.map((color, j) => (
                 <option key={j} value={j}>
-                  {j === 0 ? "Base" : "Artwork " + j} · {colorName(color)}
+                  {j === 0 ? "Base" : "Artwork " + j} · {color.toUpperCase()}
                 </option>
               ))}
             </select>

@@ -284,10 +284,10 @@ test("alignment centers actual artwork bounds and snaps to center and border", (
       ],
     };
   const center = alignArtwork("center", p, offset);
-  assert.ok(Math.abs(center.artX! - 4.5) < 0.001);
+  assert.equal(center.artX, 0);
   assert.ok(Math.abs(center.artY!) < 0.001);
-  const snap = snapArtwork(p, offset, center.artX! + 0.8, 0.9, 1.5);
-  assert.equal(snap.x, center.artX);
+  const snap = snapArtwork(p, offset, 4.5 + 0.8, 0.9, 1.5);
+  assert.equal(snap.x, 4.5);
   assert.equal(snap.guideX, 0);
   assert.equal(snap.guideY, 0);
   const left = alignArtwork("left", p, offset);
@@ -1123,4 +1123,18 @@ test("blank template is a watertight base without a missing-artwork warning", ()
       .warnings.length,
     1,
   );
+});
+
+test("area fill stays inside one connected island and respects holes and transparency", async () => {
+  const { connectedArea } = await import("../src/lib/regions");
+  const data = new Uint8ClampedArray(7 * 5 * 4);
+  for (let y = 0; y < 5; y++)
+    for (let x = 0; x < 7; x++)
+      data.set([x === 3 ? 0 : 255, 0, 0, 255], (y * 7 + x) * 4);
+  data[(2 * 7 + 1) * 4 + 3] = 0;
+  const area = connectedArea(data, 7, 5, 0, 0);
+  assert.equal(area.length, 14);
+  assert.ok([...area].every((i) => i % 7 < 3 && i !== 15));
+  assert.equal(connectedArea(data, 7, 5, 1, 2).length, 0);
+  assert.equal(connectedArea(data, 7, 5, -1, 2).length, 0);
 });

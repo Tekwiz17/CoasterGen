@@ -7,6 +7,8 @@ import {
   Redo2,
   RotateCcw,
   Paintbrush,
+  PaintBucket,
+  Crop,
 } from "lucide-react";
 import type { Artwork, Project } from "../types";
 import { nearestColorIndex } from "../lib/color";
@@ -16,12 +18,13 @@ import { vectorizeImage } from "../lib/engine";
 import { alignArtwork } from "../lib/alignment";
 import { ColorCount, ColorMapping, Filaments } from "./ColorControls";
 import { Toggle } from "./Controls";
+import ImageCrop from "./ImageCrop";
 import ImageCleanup, { type CleanupTool } from "./ImageCleanup";
 import FlatPreview from "./FlatPreview";
 import Modal from "./Modal";
 const noop = () => {};
 export default function ImportDialog({
-  source,
+  source: initialSource,
   name,
   project,
   preservePlacement = false,
@@ -35,8 +38,10 @@ export default function ImportDialog({
   onClose: () => void;
   onApply: (project: Project, artwork: Artwork) => void;
 }) {
+  const [source, setSource] = useState(initialSource);
+  const [cropping, setCropping] = useState(false);
   const editingExisting =
-    preservePlacement || (!!project.source && source === project.source);
+    preservePlacement || (!!project.source && initialSource === project.source);
   const [count, setCount] = useState(project.colorCount);
   const [remove, setRemove] = useState(
     editingExisting ? project.removeBackground : false,
@@ -59,12 +64,13 @@ export default function ImportDialog({
   const editId = useRef(0),
     edited = edits[edits.length - 1];
   const [cleanup, setCleanup] = useState(false),
-    [tool, setTool] = useState<CleanupTool>("paint");
+    [tool, setTool] = useState<CleanupTool>("fill");
   const [brush, setBrush] = useState(12),
     [slot, setSlot] = useState(1),
     [drawing, setDrawing] = useState(false);
   const [livePreview, setLivePreview] = useState("");
   const optionsKey = JSON.stringify([
+      source,
       count,
       remove,
       smooth,
@@ -105,6 +111,7 @@ export default function ImportDialog({
           const pixels = await loadPixels(source, detail);
           if (!active) return;
           const palette =
+            source === initialSource &&
             !matchingRevision &&
             editingExisting &&
             project.sourcePalette.length === count &&
@@ -277,6 +284,51 @@ export default function ImportDialog({
       </div>
       <div className="cleanup-tools">
         <button
+          className="button light small"
+          disabled={drawing}
+          onClick={() => {
+            setCropping((v) => !v);
+            setCleanup(false);
+          }}
+        >
+          <Crop size={16} />
+          Crop image
+        </button>
+        {source !== initialSource && (
+          <button
+            className="text-button"
+            disabled={drawing}
+            onClick={() => {
+              setSource(initialSource);
+              setEdits([
+                {
+                  id: ++editId.current,
+                  mask: editingExisting ? project.cleanupMask : "",
+                },
+              ]);
+              setFuture([]);
+              setLivePreview("");
+            }}
+          >
+            Reset crop
+          </button>
+        )}
+      </div>
+      {cropping && (
+        <ImageCrop
+          source={source}
+          onCancel={() => setCropping(false)}
+          onApply={(value) => {
+            setSource(value);
+            setEdits([{ id: ++editId.current, mask: "" }]);
+            setFuture([]);
+            setLivePreview("");
+            setCropping(false);
+          }}
+        />
+      )}
+      <div className="cleanup-tools">
+        <button
           className={"button light small" + (cleanup ? " active" : "")}
           aria-pressed={cleanup}
           disabled={drawing || !shown}
@@ -317,6 +369,7 @@ export default function ImportDialog({
           <div className="cleanup-modes" role="group" aria-label="Cleanup tool">
             {(
               [
+                { id: "fill", label: "Fill area", Icon: PaintBucket },
                 { id: "paint", label: "Paint", Icon: Paintbrush },
                 { id: "erase", label: "Erase", Icon: Eraser },
                 { id: "restore", label: "Restore", Icon: RotateCcw },
@@ -333,7 +386,7 @@ export default function ImportDialog({
               </button>
             ))}
           </div>
-          {tool === "paint" && (
+          {(tool === "paint" || tool === "fill") && (
             <div
               className="paint-palette"
               role="group"
@@ -377,11 +430,13 @@ export default function ImportDialog({
             <output>{brush} px</output>
           </label>
           <p>
-            {tool === "paint"
-              ? `Paint with ${selectedSlot === 0 ? "the coaster base" : `filament ${selectedSlot + 1}`}. Your strokes keep that filament when you remap image colors.`
-              : tool === "erase"
-                ? "Erase unwanted pixels to reveal the coaster base."
-                : "Brush over corrections to bring back the automatic color mapping."}{" "}
+            {tool === "fill"
+              ? "Choose a filament above, then click one connected area in the image. Other areas of that color stay unchanged."
+              : tool === "paint"
+                ? `Paint with ${selectedSlot === 0 ? "the coaster base" : `filament ${selectedSlot + 1}`}. Your strokes keep that filament when you remap image colors.`
+                : tool === "erase"
+                  ? "Erase unwanted pixels to reveal the coaster base."
+                  : "Brush over corrections to bring back the automatic color mapping."}{" "}
             Zoom in for small details; use Move to pan. Arrow keys move the
             brush; Space paints.
           </p>
@@ -407,11 +462,13 @@ export default function ImportDialog({
           </div>
           <figcaption>
             {cleanup
-              ? tool === "paint"
-                ? "Mapped image · paint with your filament"
-                : tool === "erase"
-                  ? "Mapped image · drag to erase"
-                  : "Mapped image · restore automatic colors"
+              ? tool === "fill"
+                ? "Click an area to recolor it"
+                : tool === "paint"
+                  ? "Mapped image · paint with your filament"
+                  : tool === "erase"
+                    ? "Mapped image · drag to erase"
+                    : "Mapped image · restore automatic colors"
               : edited.mask
                 ? "Cleaned image"
                 : "Original image"}
@@ -518,7 +575,7 @@ export default function ImportDialog({
               <div className="image-rematch">
                 <button
                   className="button light small"
-                  disabled={!current || drawing}
+                  disabled={!current || drawing || cropping}
                   onClick={() => {
                     rematchPending.current = true;
                     customized.current = false;
@@ -571,7 +628,7 @@ export default function ImportDialog({
         </button>
         <button
           className="button primary"
-          disabled={!current || drawing}
+          disabled={!current || drawing || cropping}
           onClick={() => {
             if (current) onApply(next, current.art);
           }}
