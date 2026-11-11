@@ -467,8 +467,9 @@ test("eraser removes pixels, supports undo and reset, and preserves the palette 
   await expect(apply).toBeEnabled();
   await modal.getByLabel("Filament 2 color", { exact: true }).fill("#00aa55");
   await modal
-    .getByRole("button", { name: "Erase unwanted areas", exact: true })
+    .getByRole("button", { name: "Paint & erase", exact: true })
     .click();
+  await modal.getByRole("button", { name: "Erase", exact: true }).click();
   await modal
     .getByRole("slider", { name: "Eraser size", exact: true })
     .fill("12");
@@ -507,23 +508,23 @@ test("eraser removes pixels, supports undo and reset, and preserves the palette 
     }
     await expect(apply).toBeEnabled();
     await expect(
-      modal.getByRole("button", { name: "Undo erasing", exact: true }),
+      modal.getByRole("button", { name: "Undo cleanup", exact: true }),
     ).toBeEnabled();
   }
   await erase();
   await modal
-    .getByRole("button", { name: "Undo erasing", exact: true })
+    .getByRole("button", { name: "Undo cleanup", exact: true })
     .click();
   await expect(
-    modal.getByRole("button", { name: "Undo erasing", exact: true }),
+    modal.getByRole("button", { name: "Undo cleanup", exact: true }),
   ).toBeDisabled();
   await expect(apply).toBeEnabled();
   await erase();
   await modal
-    .getByRole("button", { name: "Reset erasing", exact: true })
+    .getByRole("button", { name: "Reset cleanup", exact: true })
     .click();
   await expect(
-    modal.getByRole("button", { name: "Reset erasing", exact: true }),
+    modal.getByRole("button", { name: "Reset cleanup", exact: true }),
   ).toBeDisabled();
   await expect(apply).toBeEnabled();
   await erase();
@@ -536,7 +537,8 @@ test("eraser removes pixels, supports undo and reset, and preserves the palette 
   const saved = page.waitForEvent("download");
   await page.getByRole("button", { name: "Save project", exact: true }).click();
   const p = JSON.parse(await readFile((await (await saved).path())!, "utf8"));
-  expect(p.source).toMatch(/^data:image\/png;base64,/);
+  expect(p.source).toMatch(/^data:image\/svg\+xml/);
+  expect(p.cleanupMask).toMatch(/^data:image\/png;base64,/);
   expect(p.sourcePalette).toHaveLength(p.colorCount);
   const alpha = await page.evaluate(async (source: string) => {
     const image = new Image();
@@ -553,7 +555,7 @@ test("eraser removes pixels, supports undo and reset, and preserves the palette 
         Math.floor(image.height * 0.5),
         1,
         1,
-      ).data[3],
+      ).data[0],
       ctx.getImageData(
         Math.floor(image.width * 0.2),
         Math.floor(image.height * 0.5),
@@ -561,8 +563,8 @@ test("eraser removes pixels, supports undo and reset, and preserves the palette 
         1,
       ).data[3],
     ];
-  }, p.source);
-  expect(alpha).toEqual([0, 255]);
+  }, p.cleanupMask);
+  expect(alpha).toEqual([255, 0]);
   await expect(
     page.getByText("Saved on this device", { exact: true }),
   ).toBeVisible();
@@ -589,6 +591,210 @@ test("eraser removes pixels, supports undo and reset, and preserves the palette 
   await expect(page.getByLabel("Image scale", { exact: true })).toHaveText(
     "95%",
   );
+  expect(errors).toEqual([]);
+  await fits(page);
+});
+
+test("live multicolor painting survives remapping, save/reload, restore, zoom and export", async ({
+  page,
+}) => {
+  test.setTimeout(120000);
+  const errors: string[] = [];
+  page.on("pageerror", (e) => errors.push(e.message));
+  await open(page);
+  await page
+    .getByLabel("Import artwork file", { exact: true })
+    .setInputFiles(image);
+  let modal = page.getByRole("dialog"),
+    apply = modal.getByRole("button", { name: "Use this image", exact: true });
+  await expect(apply).toBeEnabled({ timeout: 30000 });
+  await modal.getByLabel("Filament 2 color", { exact: true }).fill("#00aa55");
+  await modal.getByLabel("Filament 3 color", { exact: true }).fill("#ee22dd");
+  await modal
+    .getByRole("button", { name: "Paint & erase", exact: true })
+    .click();
+  await modal
+    .getByRole("slider", { name: "Brush size", exact: true })
+    .fill("40");
+  const brush = modal.getByRole("img", {
+    name: "Image paint brush.",
+    exact: false,
+  });
+  await expect(brush).toBeVisible();
+  await expect(
+    modal.getByRole("checkbox", { name: "Keep fine details", exact: false }),
+  ).toBeChecked();
+  async function paint(x: number, y: number, live = false) {
+    await brush.scrollIntoViewIfNeeded();
+    const r = (await brush.boundingBox())!,
+      px = r.x + r.width * x,
+      py = r.y + r.height * y;
+    const preview = modal.getByTestId("live-cleanup-preview");
+    const before = await preview.getAttribute("href");
+    await page.mouse.move(px, py);
+    await page.mouse.down();
+    await page.mouse.move(px + r.width * 0.02, py);
+    if (live) {
+      await expect(apply).toBeDisabled();
+      await expect.poll(() => preview.getAttribute("href")).not.toBe(before);
+    }
+    await page.mouse.up();
+    await expect(apply).toBeEnabled({ timeout: 30000 });
+  }
+  await modal
+    .getByRole("button", { name: "Paint with filament 2", exact: true })
+    .click();
+  await paint(0.3, 0.4, true);
+  await modal
+    .getByRole("button", { name: "Paint with filament 3", exact: true })
+    .click();
+  await paint(0.8, 0.5);
+  await modal
+    .getByRole("button", { name: "Undo cleanup", exact: true })
+    .click();
+  await expect(
+    modal.getByRole("button", { name: "Redo cleanup", exact: true }),
+  ).toBeEnabled();
+  await modal
+    .getByRole("button", { name: "Redo cleanup", exact: true })
+    .click();
+  await expect(apply).toBeEnabled({ timeout: 30000 });
+  await modal
+    .getByRole("button", { name: "Zoom in cleanup", exact: true })
+    .click();
+  await expect(modal.locator(".cleanup-view-tools")).toContainText("2×");
+  await modal
+    .getByRole("button", { name: "Move cleanup view", exact: true })
+    .click();
+  await expect(
+    modal.getByRole("button", { name: "Move cleanup view", exact: true }),
+  ).toHaveAttribute("aria-pressed", "true");
+  await modal
+    .getByRole("button", { name: "Fit cleanup image", exact: true })
+    .click();
+  await modal
+    .getByRole("button", { name: "Move cleanup view", exact: true })
+    .click();
+  await modal
+    .getByLabel("Import image detail", { exact: true })
+    .selectOption("1024");
+  await expect(apply).toBeEnabled({ timeout: 30000 });
+  await expect(
+    modal.getByLabel("Filament 2 color", { exact: true }),
+  ).toHaveValue("#00aa55");
+  await expect(
+    modal.getByLabel("Filament 3 color", { exact: true }),
+  ).toHaveValue("#ee22dd");
+  await modal
+    .getByRole("slider", { name: "Brush size", exact: true })
+    .fill("1");
+  await paint(0.6, 0.25);
+  await fits(page);
+  await apply.click();
+  await ready(page);
+  await page
+    .getByLabel("Project name", { exact: true })
+    .fill("Painted details");
+  for (const select of await page.locator(".color-mapping select").all())
+    await select.selectOption("0");
+  await ready(page);
+  const download = page.waitForEvent("download");
+  await page.getByRole("button", { name: "Save project", exact: true }).click();
+  const saved = JSON.parse(
+    await readFile((await (await download).path())!, "utf8"),
+  );
+  expect(saved.detail).toBe(1024);
+  expect(saved.cleanupMask).toMatch(/^data:image\/png;base64,/);
+  const codes = await page.evaluate(async (mask: string) => {
+    const i = new Image();
+    i.src = mask;
+    await i.decode();
+    const c = document.createElement("canvas");
+    c.width = i.width;
+    c.height = i.height;
+    const ctx = c.getContext("2d")!;
+    ctx.drawImage(i, 0, 0);
+    return [
+      [0.3, 0.4],
+      [0.8, 0.5],
+      [0.6, 0.25],
+    ].map(
+      ([x, y]) =>
+        ctx.getImageData(
+          Math.floor(c.width * x),
+          Math.floor(c.height * y),
+          1,
+          1,
+        ).data[0],
+    );
+  }, saved.cleanupMask);
+  expect(codes).toEqual([2, 3, 3]);
+  await printStep(page);
+  await page
+    .getByRole("button", { name: "More export formats", exact: true })
+    .click();
+  const svgDownload = page.waitForEvent("download");
+  await page
+    .getByRole("button", { name: "Color-matched vector artwork", exact: false })
+    .click();
+  const svg = await readFile((await (await svgDownload).path())!, "utf8");
+  expect(svg).toContain('fill="#00AA55"');
+  expect(svg).toContain('fill="#EE22DD"');
+  await page.getByRole("button", { name: "Close dialog", exact: true }).click();
+  await expect(
+    page.getByText("Saved on this device", { exact: true }),
+  ).toBeVisible();
+  await page.reload();
+  await ready(page);
+  await page.getByRole("tab", { name: "Image & colors", exact: true }).click();
+  await page.getByRole("button", { name: "Edit / erase", exact: true }).click();
+  modal = page.getByRole("dialog");
+  apply = modal.getByRole("button", { name: "Use this image", exact: true });
+  await expect(apply).toBeEnabled({ timeout: 30000 });
+  await modal
+    .getByRole("button", { name: "Paint & erase", exact: true })
+    .click();
+  await modal.getByRole("button", { name: "Restore", exact: true }).click();
+  await modal
+    .getByRole("slider", { name: "Brush size", exact: true })
+    .fill("60");
+  const restore = modal.getByRole("img", {
+    name: "Restore automatic colors.",
+    exact: false,
+  });
+  await restore.scrollIntoViewIfNeeded();
+  const box = (await restore.boundingBox())!;
+  await restore.click({
+    position: { x: box.width * 0.8, y: box.height * 0.5 },
+  });
+  await expect(apply).toBeEnabled({ timeout: 30000 });
+  await apply.click();
+  await ready(page);
+  await expect(page.getByLabel("Project name", { exact: true })).toHaveValue(
+    "Painted details",
+  );
+  const second = page.waitForEvent("download");
+  await page.getByRole("button", { name: "Save project", exact: true }).click();
+  const edited = JSON.parse(
+    await readFile((await (await second).path())!, "utf8"),
+  );
+  const restored = await page.evaluate(async (mask: string) => {
+    const i = new Image();
+    i.src = mask;
+    await i.decode();
+    const c = document.createElement("canvas");
+    c.width = i.width;
+    c.height = i.height;
+    const ctx = c.getContext("2d")!;
+    ctx.drawImage(i, 0, 0);
+    return ctx.getImageData(
+      Math.round(c.width * 0.8),
+      Math.round(c.height * 0.5),
+      1,
+      1,
+    ).data[3];
+  }, edited.cleanupMask);
+  expect(restored).toBe(0);
   expect(errors).toEqual([]);
   await fits(page);
 });

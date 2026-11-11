@@ -145,6 +145,11 @@ export function artContours(p: Project, art: Artwork): Vec2[][][] {
     ),
   );
 }
+export function paintContours(p: Project, art: Artwork): Vec2[][][] {
+  return art.paintLoops
+    ? artContours(p, { ...art, loops: art.paintLoops })
+    : [];
+}
 export function buildModel(
   api: ManifoldToplevel,
   p: Project,
@@ -162,13 +167,17 @@ export function buildModel(
   try {
     const outer = keep(new CS(outlines(p), "EvenOdd"));
     const clip = keep(new CS(outlines(p, p.margin), "EvenOdd"));
-    const contours = artContours(p, art);
+    const contours = artContours(p, art),
+      painted = paintContours(p, art);
     let occupied = keep(CS.square(0));
     const regions: Array<{ section: CrossSection; colorIndex: number }> = [];
     for (let slot = 1; slot < p.colorCount; slot++) {
-      const all = contours.flatMap((loops, i) =>
-        (p.mapping[i] ?? i) === slot ? loops : [],
-      );
+      const all = [
+        ...contours.flatMap((loops, i) =>
+          (p.mapping[i] ?? i) === slot ? loops : [],
+        ),
+        ...(painted[slot] ?? []),
+      ];
       if (!all.length) continue;
       const raw = keep(new CS(all, "EvenOdd"));
       const clipped = keep(raw.intersect(clip));

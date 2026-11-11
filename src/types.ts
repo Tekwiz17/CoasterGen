@@ -17,6 +17,8 @@ export interface Project {
   mapping: number[];
   source: string;
   sourcePalette: string[];
+  cleanupMask: string;
+  preserveDetails: boolean;
   sourceName: string;
   sample: string;
   artScale: number;
@@ -40,6 +42,8 @@ export interface Artwork {
   width: number;
   height: number;
   loops: Vec2[][][];
+  paintLoops?: Vec2[][][];
+  paintCounts?: number[];
   sourceColors: string[];
   counts: number[];
   pixels: number;
@@ -75,6 +79,8 @@ export const DEFAULT_PROJECT: Project = {
   mapping: [0, 1, 2, 3],
   source: "",
   sourcePalette: [],
+  cleanupMask: "",
+  preserveDetails: true,
   sourceName: "Solstice.svg",
   sample: "sunset",
   artScale: 90,

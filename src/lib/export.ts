@@ -1,6 +1,6 @@
 import { strToU8, zipSync } from "fflate";
 import type { Artwork, ModelData, Project } from "../types";
-import { artContours, outlines, pathData } from "./geometry";
+import { artContours, paintContours, outlines, pathData } from "./geometry";
 const xml = (s: string) =>
   s.replace(
     /[<>&"']/g,
@@ -72,7 +72,7 @@ export function export3mf(
       "Metadata/model_settings.config": strToU8(config),
       "Metadata/project_settings.config": strToU8(JSON.stringify(settings)),
       "Metadata/coastergen.json": strToU8(
-        JSON.stringify({ ...p, source: undefined }),
+        JSON.stringify({ ...p, source: undefined, cleanupMask: undefined }),
       ),
     },
     { level: 6 },
@@ -82,8 +82,14 @@ export function exportSvg(p: Project, art: Artwork): string {
   const r = p.diameter / 2,
     outer = pathData(outlines(p)),
     clip = pathData(outlines(p, p.margin)),
-    contours = artContours(p, art);
-  return `<?xml version="1.0" encoding="UTF-8"?><svg xmlns="http://www.w3.org/2000/svg" width="${p.diameter}mm" height="${p.diameter}mm" viewBox="${-r} ${-r} ${p.diameter} ${p.diameter}"><title>${xml(p.name)}</title><defs><clipPath id="art-area"><path d="${clip}" clip-rule="evenodd"/></clipPath></defs><path d="${outer}" fill-rule="evenodd" fill="${p.colors[0]}"/><g clip-path="url(#art-area)">${contours.map((loops, i) => ((p.mapping[i] ?? i) === 0 ? "" : `<path fill="${p.colors[p.mapping[i] ?? i]}" fill-rule="evenodd" d="${pathData(loops)}"/>`)).join("")}</g></svg>`;
+    contours = [
+      ...artContours(p, art).map((loops, i) => ({
+        loops,
+        slot: p.mapping[i] ?? i,
+      })),
+      ...paintContours(p, art).map((loops, slot) => ({ loops, slot })),
+    ];
+  return `<?xml version="1.0" encoding="UTF-8"?><svg xmlns="http://www.w3.org/2000/svg" width="${p.diameter}mm" height="${p.diameter}mm" viewBox="${-r} ${-r} ${p.diameter} ${p.diameter}"><title>${xml(p.name)}</title><defs><clipPath id="art-area"><path d="${clip}" clip-rule="evenodd"/></clipPath></defs><path d="${outer}" fill-rule="evenodd" fill="${p.colors[0]}"/><g clip-path="url(#art-area)">${contours.map(({ loops, slot }) => (slot === 0 ? "" : `<path fill="${p.colors[slot]}" fill-rule="evenodd" d="${pathData(loops)}"/>`)).join("")}</g></svg>`;
 }
 export function exportStl(model: ModelData): ArrayBuffer {
   const buffer = new ArrayBuffer(84 + model.triangles * 50),

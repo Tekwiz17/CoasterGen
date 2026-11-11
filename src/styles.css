@@ -2194,3 +2194,169 @@ input[type="range"]::-moz-range-thumb {
   gap: 12px;
   flex-shrink: 0;
 }
+/* Direct filament painting and precise image cleanup. */
+fieldset.brush-tools,
+fieldset.import-settings {
+  min-width: 0;
+  border: 0;
+}
+fieldset.import-settings {
+  margin: 0;
+  padding: 0;
+}
+.modal:has(.import-previews.is-editing) {
+  width: min(940px, calc(100vw - 32px));
+  max-width: 940px;
+}
+.import-previews.is-editing {
+  grid-template-columns: minmax(0, 1.5fr) minmax(0, 1fr);
+}
+.import-previews.is-editing .image-checker,
+.import-previews.is-editing .import-after {
+  height: 300px;
+}
+.import-previews.is-editing .image-checker {
+  padding: 0;
+}
+.cleanup-stage {
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+  min-height: 0;
+  position: relative;
+}
+.image-cleanup {
+  overflow: hidden;
+  display: block;
+}
+.image-cleanup-frame {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+}
+.image-cleanup.moving canvas {
+  cursor: grab;
+  touch-action: none;
+}
+.image-cleanup.moving canvas:active {
+  cursor: grabbing;
+}
+.cleanup-view-tools {
+  position: absolute;
+  z-index: 2;
+  left: 50%;
+  bottom: 9px;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  background: #fffffff5;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  box-shadow: 0 2px 10px #19392c10;
+  padding: 3px;
+  gap: 1px;
+  white-space: nowrap;
+}
+.cleanup-view-tools button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  min-width: 28px;
+  height: 28px;
+  border-radius: 5px;
+  font-size: 11px;
+  padding: 0 5px;
+}
+.cleanup-view-tools button:hover,
+.cleanup-view-tools button[aria-pressed="true"] {
+  background: #e4f1e9;
+  color: var(--green);
+}
+.cleanup-view-tools > span {
+  font-size: 11px;
+  min-width: 22px;
+  text-align: center;
+}
+.cleanup-modes {
+  display: flex;
+  gap: 5px;
+  margin-bottom: 12px;
+}
+.cleanup-modes button {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 12px;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  font-size: 12px;
+}
+.cleanup-modes button.active {
+  background: #fff;
+  border-color: #cbded1;
+  color: var(--green);
+  box-shadow: 0 1px 2px #102c2408;
+}
+.paint-palette {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin: 0 0 14px;
+}
+.paint-palette button {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  padding: 5px 9px 5px 5px;
+  border: 1px solid #d1ded4;
+  border-radius: 7px;
+  background: #fff;
+  font-size: 11px;
+}
+.paint-palette button[aria-pressed="true"] {
+  border-color: var(--green);
+  box-shadow: 0 0 0 1px var(--green);
+}
+.paint-palette i {
+  display: block;
+  width: 23px;
+  height: 23px;
+  background: var(--swatch);
+  border: 1px solid #00000015;
+  border-radius: 5px;
+}
+.brush-tools output {
+  font-size: 11px;
+  min-width: 36px;
+  text-align: right;
+  color: var(--muted);
+}
+.import-detail-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  align-items: center;
+  gap: 22px;
+  margin-top: 18px;
+}
+.import-detail-row .toggle-row {
+  margin: 0;
+}
+@media (max-width: 600px) {
+  .import-previews.is-editing {
+    grid-template-columns: 1fr;
+  }
+  .import-previews.is-editing .image-checker {
+    height: 280px;
+  }
+  .import-previews.is-editing .import-after {
+    height: 150px;
+  }
+  .import-detail-row {
+    grid-template-columns: 1fr;
+    gap: 0;
+  }
+  .import-detail-row .toggle-row {
+    border-top: 1px solid var(--line);
+  }
+}

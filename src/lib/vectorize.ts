@@ -41,11 +41,21 @@ export function vectorize(
   removeBackground: boolean,
   smooth = true,
   palette?: string[],
+  options: { preserveDetails?: boolean; overrides?: Uint8Array } = {},
 ): Artwork {
   if (!Number.isInteger(count) || count < 2 || count > 8)
     throw new Error("Choose between 2 and 8 total colors.");
   if (width < 1 || height < 1 || data.length !== width * height * 4)
     throw new Error("The image has invalid dimensions.");
+  const preserve = options.preserveDetails ?? false;
+  if (options.overrides && options.overrides.length !== width * height)
+    throw new Error("The cleanup layer has invalid dimensions.");
+  const shift = preserve ? 2 : 3,
+    channelBits = 8 - shift;
+  const colorKey = (r: number, g: number, b: number) =>
+    ((r >> shift) << (channelBits * 2)) |
+    ((g >> shift) << channelBits) |
+    (b >> shift);
   const transparent = new Uint8Array(width * height);
   let removed = 0;
   for (let i = 0; i < transparent.length; i++)
@@ -103,7 +113,7 @@ export function vectorize(
       const r = data[i * 4],
         g = data[i * 4 + 1],
         b = data[i * 4 + 2];
-      const key = ((r >> 3) << 10) | ((g >> 3) << 5) | (b >> 3);
+      const key = colorKey(r, g, b);
       let e = hist.get(key);
       if (!e) {
         const color: RGB = [r, g, b];
@@ -184,8 +194,9 @@ export function vectorize(
     const sums = Array.from({ length: count }, () => [0, 0, 0, 0]);
     for (const p of points) {
       const j = nearest(p.lab);
-      for (let c = 0; c < 3; c++) sums[j][c] += p.color[c] * p.n;
-      sums[j][3] += p.n;
+      const weight = preserve ? Math.sqrt(p.n) : p.n;
+      for (let c = 0; c < 3; c++) sums[j][c] += p.color[c] * weight;
+      sums[j][3] += weight;
     }
     for (let j = 1; j < count; j++)
       if (sums[j][3]) {
@@ -221,9 +232,7 @@ export function vectorize(
   for (let i = 0; i < labels.length; i++)
     if (!transparent[i])
       labels[i] = lookup.get(
-        ((data[i * 4] >> 3) << 10) |
-          ((data[i * 4 + 1] >> 3) << 5) |
-          (data[i * 4 + 2] >> 3),
+        colorKey(data[i * 4], data[i * 4 + 1], data[i * 4 + 2]),
       )!;
   // Antialiased pixels between two colors can be nearest to an unrelated
   // palette color (e.g. red between cream and black). Resolve that blend
@@ -250,6 +259,7 @@ export function vectorize(
         const a = colors[others[0][0]],
           b = colors[others[1][0]];
         const pixel: RGB = [data[i * 4], data[i * 4 + 1], data[i * 4 + 2]];
+        if (preserve && dist(pixel, colors[current]) < 100) continue;
         const v = b.map((c, j) => c - a[j]),
           length = v.reduce((sum, c) => sum + c * c, 0);
         if (length < 100) continue;
@@ -267,7 +277,7 @@ export function vectorize(
       }
   // Remove one-pixel burrs while retaining continuous thin lines. Work from
   // a snapshot each pass so color/scan ordering cannot affect the result.
-  if (smooth)
+  if (smooth && !preserve)
     for (let pass = 0; pass < 2; pass++) {
       const snapshot = filtered.slice();
       for (let y = 1; y < height - 1; y++)
@@ -302,7 +312,7 @@ export function vectorize(
         }
     }
   // Remove isolated one-pixel noise without blurring intentional connected lines.
-  if (smooth)
+  if (smooth && !preserve)
     for (let y = 1; y < height - 1; y++)
       for (let x = 1; x < width - 1; x++) {
         const i = y * width + x,
@@ -321,7 +331,7 @@ export function vectorize(
       }
   // Reassign tiny disconnected color flecks (often antialiasing/compression
   // artifacts). Work from a snapshot so scan direction cannot change results.
-  if (smooth) {
+  if (smooth && !preserve) {
     const labels = filtered.slice();
     const seen = new Uint8Array(labels.length);
     for (let start = 0; start < labels.length; start++) {
@@ -362,28 +372,91 @@ export function vectorize(
       }
     }
   }
+  // Paint chooses output filament slots, independent of the detected colors.
+  // Apply it last so small strokes survive quantization and noise removal.
+  const overrides = options.overrides;
+  if (overrides)
+    for (let i = 0; i < filtered.length; i++) {
+      const code = overrides[i];
+      if (code === 255) filtered[i] = 255;
+      else if (code >= 1 && code <= 8)
+        filtered[i] = count + Math.min(count - 1, code - 1);
+    }
   const vertices = smooth
-    ? smoothBoundaries(filtered, width, height)
+    ? smoothBoundaries(filtered, width, height, preserve || !!overrides)
     : undefined;
-  const counts = Array(count).fill(0);
-  for (const v of filtered) if (v !== 255) counts[v]++;
+  const counts = Array(count).fill(0),
+    paintCounts = Array(count).fill(0);
+  for (const v of filtered)
+    if (v !== 255) {
+      if (v < count) counts[v]++;
+      else paintCounts[v - count]++;
+    }
   return {
     width,
     height,
     loops: Array.from({ length: count }, (_, c) =>
-      trace(filtered, width, height, c, vertices),
+      trace(filtered, width, height, c, vertices, preserve ? 0.05 : 1),
     ),
+    ...(overrides
+      ? {
+          paintLoops: Array.from({ length: count }, (_, c) =>
+            trace(filtered, width, height, count + c, vertices, 0.05),
+          ),
+          paintCounts,
+        }
+      : {}),
     sourceColors: colors.map(hex),
     counts,
-    pixels: counts.reduce((a, b) => a + b, 0),
+    pixels: [...counts, ...paintCounts].reduce((a, b) => a + b, 0),
     removed,
   };
 }
 // Every color uses the SAME boundary graph. Smoothing each color separately
 // creates slivers and gaps in both the preview and the printed inlays. Junctions
 // stay fixed; only degree-two boundary vertices move, by less than one pixel.
-function smoothBoundaries(labels: Uint8Array, w: number, h: number) {
+function smoothBoundaries(
+  labels: Uint8Array,
+  w: number,
+  h: number,
+  preserve = false,
+) {
   const stride = w + 1;
+  const fixed = new Set<number>();
+  if (preserve)
+    for (let y = 0; y < h; y++)
+      for (let x = 0; x < w; x++) {
+        const color = labels[y * w + x];
+        if (color === 255) continue;
+        // A pixel in a one-pixel stroke or tiny island has no solid 2×2 core.
+        // Pin its incident corners on the shared graph instead of rounding it away.
+        let core = false;
+        for (let dy = -1; dy <= 0 && !core; dy++)
+          for (let dx = -1; dx <= 0; dx++) {
+            const ax = x + dx,
+              ay = y + dy;
+            if (ax < 0 || ay < 0 || ax + 1 >= w || ay + 1 >= h) continue;
+            if (
+              [
+                ay * w + ax,
+                ay * w + ax + 1,
+                (ay + 1) * w + ax,
+                (ay + 1) * w + ax + 1,
+              ].every((i) => labels[i] === color)
+            ) {
+              core = true;
+              break;
+            }
+          }
+        if (!core)
+          for (const key of [
+            y * stride + x,
+            y * stride + x + 1,
+            (y + 1) * stride + x,
+            (y + 1) * stride + x + 1,
+          ])
+            fixed.add(key);
+      }
   const graph = new Map<number, number[]>();
   const link = (a: number, b: number) => {
     (graph.get(a) ?? (graph.set(a, []), graph.get(a)!)).push(b);
@@ -406,7 +479,7 @@ function smoothBoundaries(labels: Uint8Array, w: number, h: number) {
     const next = new Map<number, Vec2>();
     for (const [key, adjacent] of graph) {
       const p = points.get(key)!;
-      if (adjacent.length !== 2) {
+      if (adjacent.length !== 2 || fixed.has(key)) {
         next.set(key, p);
         continue;
       }
@@ -435,7 +508,8 @@ function smoothBoundaries(labels: Uint8Array, w: number, h: number) {
     visited.add(edgeKey(start, first));
     while (true) {
       chain.push(key);
-      if (key === start || graph.get(key)!.length !== 2) break;
+      if (key === start || graph.get(key)!.length !== 2 || fixed.has(key))
+        break;
       const next = graph.get(key)!.find((n) => n !== prev)!;
       visited.add(edgeKey(key, next));
       prev = key;
@@ -458,7 +532,7 @@ function smoothBoundaries(labels: Uint8Array, w: number, h: number) {
     } else simplify(chain);
   };
   for (const [key, adjacent] of graph)
-    if (adjacent.length !== 2) {
+    if (adjacent.length !== 2 || fixed.has(key)) {
       keep.add(key);
       for (const next of adjacent)
         if (!visited.has(edgeKey(key, next))) walk(key, next);
@@ -474,6 +548,7 @@ function trace(
   h: number,
   color: number,
   vertices?: { points: Map<number, Vec2>; keep: Set<number> },
+  minArea = 1,
 ): Vec2[][] {
   const stride = w + 1;
   type Edge = { end: number; dir: number };
@@ -537,7 +612,7 @@ function trace(
         }, 0) / 2,
       );
       // Collinear removal is reversible, so shared segments remain identical.
-      if (area >= 1 && clean.length >= 3) loops.push(clean);
+      if (area >= minArea && clean.length >= 3) loops.push(clean);
     }
   }
   return loops;

@@ -65,6 +65,8 @@ export const vectorizeImage = (payload: {
   remove: boolean;
   smooth: boolean;
   palette?: string[];
+  preserveDetails?: boolean;
+  overrides?: Uint8Array;
 }) => call<Artwork>("vectorize", payload);
 export const generateModel = (project: Project, artwork: Artwork) =>
   call<ModelData>("model", { project, artwork });

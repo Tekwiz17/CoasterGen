@@ -627,3 +627,189 @@ test("antialiasing does not muddy the interior colors of solid artwork", () => {
   const art = vectorize(data, n, n, 2, "#FFFFFF", false, true);
   assert.equal(art.sourceColors[1], "#126ECA");
 });
+
+test("fine detail mode keeps tiny accents, single-pixel lines, and small gaps", () => {
+  const n = 64,
+    data = new Uint8ClampedArray(n * n * 4).fill(255);
+  for (let y = 8; y < 55; y++) data.set([0, 0, 0, 255], (y * n + 20) * 4);
+  for (const [x, y] of [
+    [40, 20],
+    [41, 20],
+    [40, 21],
+    [41, 21],
+  ])
+    data.set([230, 30, 50, 255], (y * n + x) * 4);
+  for (const [x, y] of [
+    [42, 42],
+    [43, 42],
+    [42, 43],
+    [43, 43],
+  ])
+    data.set([25, 90, 210, 255], (y * n + x) * 4);
+  const fine = vectorize(data, n, n, 4, "#FFFFFF", false, true, undefined, {
+    preserveDetails: true,
+  });
+  const dark = fine.sourceColors.findIndex(
+    (c) => parseInt(c.slice(1, 3), 16) < 10 && parseInt(c.slice(5, 7), 16) < 10,
+  );
+  const red = fine.sourceColors.findIndex(
+    (c) =>
+      parseInt(c.slice(1, 3), 16) > 200 && parseInt(c.slice(5, 7), 16) < 80,
+  );
+  const blue = fine.sourceColors.findIndex(
+    (c) =>
+      parseInt(c.slice(5, 7), 16) > 180 && parseInt(c.slice(1, 3), 16) < 60,
+  );
+  assert.ok(dark > 0 && red > 0 && blue > 0);
+  assert.equal(fine.counts[dark], 47);
+  assert.equal(fine.counts[red], 4);
+  assert.equal(fine.counts[blue], 4);
+  assert.ok(
+    fine.loops[dark].length &&
+      fine.loops[red].length &&
+      fine.loops[blue].length,
+  );
+  buildModel(
+    api,
+    project({ colors: fine.sourceColors, preserveDetails: true }),
+    fine,
+  ).parts.forEach(watertight);
+  const highlight = new Uint8ClampedArray(n * n * 4).fill(255);
+  for (let y = 12; y < 50; y++)
+    for (let x = 12; x < 50; x++)
+      highlight.set([0, 0, 0, 255], (y * n + x) * 4);
+  highlight.set([255, 255, 255, 255], (25 * n + 25) * 4);
+  const eye = vectorize(
+    highlight,
+    n,
+    n,
+    2,
+    "#FFFFFF",
+    false,
+    true,
+    ["#FFFFFF", "#000000"],
+    { preserveDetails: true },
+  );
+  assert.equal(
+    eye.loops[1].length,
+    2,
+    "A one-pixel white highlight remains a hole in the dark inlay",
+  );
+  buildModel(
+    api,
+    project({ colorCount: 2, colors: ["#FFFFFF", "#000000"], mapping: [0, 1] }),
+    eye,
+  ).parts.forEach(watertight);
+});
+
+test("filament paint overrides remapping and noise removal, and stays watertight", () => {
+  const n = 64,
+    data = new Uint8ClampedArray(n * n * 4).fill(255),
+    overrides = new Uint8Array(n * n);
+  for (let y = 12; y < 52; y++)
+    for (let x = 12; x < 52; x++) data.set([0, 0, 0, 255], (y * n + x) * 4);
+  for (let y = 22; y < 29; y++)
+    for (let x = 30; x < 38; x++) overrides[y * n + x] = 3;
+  overrides[34 * n + 34] = 4; // A one-pixel correction must survive smoothing.
+  overrides[35 * n + 35] = 255;
+  const art = vectorize(
+    data,
+    n,
+    n,
+    4,
+    "#FFFFFF",
+    false,
+    true,
+    ["#FFFFFF", "#000000", "#FF00FF", "#00FF00"],
+    { overrides, preserveDetails: true },
+  );
+  assert.equal(art.paintCounts![2], 56);
+  assert.equal(art.paintCounts![3], 1);
+  assert.ok(art.paintLoops![3].length);
+  assert.equal(art.pixels, n * n - 1);
+  const p = project({
+    colors: ["#FFFFFF", "#000000", "#FF00FF", "#00FF00"],
+    mapping: [0, 0, 0, 0],
+  });
+  const model = buildModel(api, p, art);
+  model.parts.forEach(watertight);
+  assert.deepEqual(
+    model.parts.map((p) => p.colorIndex),
+    [0, 2, 3],
+  );
+  assert.ok(Math.abs(model.volume - buildModel(api, p, blank).volume) < 0.1);
+  const svg = exportSvg(p, art);
+  assert.ok(svg.includes('fill="#FF00FF"'));
+  assert.ok(svg.includes('fill="#00FF00"'));
+});
+
+test("painted filament indices remain valid when reducing to two colors", () => {
+  const n = 32,
+    data = new Uint8ClampedArray(n * n * 4).fill(255),
+    overrides = new Uint8Array(n * n);
+  for (let y = 10; y < 20; y++)
+    for (let x = 10; x < 20; x++) overrides[y * n + x] = 8;
+  const art = vectorize(data, n, n, 2, "#FFFFFF", false, true, undefined, {
+    overrides,
+  });
+  assert.deepEqual(art.paintCounts, [0, 100]);
+  const p = project({
+    colorCount: 2,
+    colors: ["#FFFFFF", "#000000"],
+    mapping: [0, 0],
+  });
+  const model = buildModel(api, p, art);
+  model.parts.forEach(watertight);
+  assert.deepEqual(
+    model.parts.map((p) => p.colorIndex),
+    [0, 1],
+  );
+});
+
+test("cleanup masks validate, restore automatic colors, and can repaint removed backgrounds", async () => {
+  const { decodeCleanupPixels } = await import("../src/lib/cleanup");
+  assert.deepEqual(
+    [
+      ...decodeCleanupPixels(
+        new Uint8ClampedArray([
+          1, 0, 0, 255, 8, 0, 0, 255, 255, 0, 0, 255, 0, 0, 0, 255, 9, 0, 0,
+          255, 2, 0, 0, 127,
+        ]),
+      ),
+    ],
+    [1, 8, 255, 0, 0, 0],
+  );
+  const n = 32,
+    data = new Uint8ClampedArray(n * n * 4).fill(255),
+    mask = new Uint8Array(n * n);
+  mask[16 * n + 16] = 2;
+  const art = vectorize(data, n, n, 2, "#FFFFFF", true, true, undefined, {
+    overrides: mask,
+    preserveDetails: true,
+  });
+  assert.equal(art.pixels, 1);
+  assert.equal(art.paintCounts![1], 1);
+  mask.fill(0);
+  const restored = vectorize(data, n, n, 2, "#FFFFFF", false, true, undefined, {
+    overrides: mask,
+  });
+  assert.equal(restored.counts[0], n * n);
+  assert.equal(restored.paintCounts![1], 0);
+  assert.throws(() =>
+    vectorize(data, n, n, 2, "#FFFFFF", false, true, undefined, {
+      overrides: new Uint8Array(2),
+    }),
+  );
+  const p = parseProject(
+    project({
+      cleanupMask: "data:image/png;base64,eA==",
+      detail: 1024,
+      preserveDetails: true,
+    }),
+  );
+  assert.equal(p.detail, 1024);
+  assert.equal(p.preserveDetails, true);
+  assert.throws(() =>
+    parseProject({ ...p, cleanupMask: "https://example.com/mask.png" }),
+  );
+});

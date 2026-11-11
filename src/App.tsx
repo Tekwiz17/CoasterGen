@@ -95,6 +95,7 @@ export default function App() {
   const [pendingImage, setPendingImage] = useState<{
     source: string;
     name: string;
+    editing?: boolean;
   } | null>(null);
   const [toast, setToast] = useState("");
   const [dragging, setDragging] = useState(false);
@@ -218,6 +219,7 @@ export default function App() {
     change(
       {
         source: "",
+        cleanupMask: "",
         sample: id,
         sourceName: sample.name + ".svg",
         name: sample.name,
@@ -868,7 +870,8 @@ export default function App() {
                           <option value={192}>Quick</option>
                           <option value={320}>Standard</option>
                           <option value={512}>High (recommended)</option>
-                          <option value={768}>Extra high (slower)</option>
+                          <option value={768}>Fine</option>
+                          <option value={1024}>Extra fine (slower)</option>
                         </select>
                       </label>
                     </details>
@@ -902,19 +905,26 @@ export default function App() {
                       <div className="file-chip">
                         <span title={p.sourceName}>{p.sourceName}</span>
                         <div className="file-actions">
-                          {p.source && (
+                          {
                             <button
                               className="text-button"
+                              disabled={!art}
                               onClick={() =>
                                 setPendingImage({
-                                  source: p.source,
+                                  source:
+                                    p.source ||
+                                    svgDataUrl(
+                                      SAMPLES.find((s) => s.id === p.sample)
+                                        ?.svg ?? SAMPLES[0].svg,
+                                    ),
                                   name: p.sourceName,
+                                  editing: true,
                                 })
                               }
                             >
                               Edit / erase
                             </button>
-                          )}
+                          }
                           <button
                             className="text-button"
                             onClick={() => fileInput.current?.click()}
@@ -954,6 +964,14 @@ export default function App() {
                           <p className="control-note">Matching colors…</p>
                         )}
                       </details>
+                      <Toggle
+                        label="Keep fine details"
+                        description="Keep small accents, thin lines, and tiny gaps."
+                        checked={p.preserveDetails}
+                        onChange={() =>
+                          change({ preserveDetails: !p.preserveDetails })
+                        }
+                      />
                       <Toggle
                         label="Smooth edges"
                         description="Clean up pixel steps. Turn off for pixel art."
@@ -1319,6 +1337,7 @@ export default function App() {
           source={pendingImage.source}
           name={pendingImage.name}
           project={p}
+          preservePlacement={pendingImage.editing}
           onClose={() => setPendingImage(null)}
           onApply={(next, artwork) => {
             editor.applyImage(next, artwork);

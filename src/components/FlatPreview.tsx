@@ -2,6 +2,7 @@ import { useId, useMemo, useRef, useState } from "react";
 import type { Artwork, Project } from "../types";
 import {
   artContours,
+  paintContours,
   magnetCenters,
   outlines,
   pathData,
@@ -12,6 +13,7 @@ interface Props {
   artwork: Artwork | null;
   bottom: boolean;
   zoom: number;
+  imagePreview?: string;
   onMove: (x: number, y: number) => void;
   onDragStart: () => void;
   onDragEnd: () => void;
@@ -22,13 +24,24 @@ export default function FlatPreview({
   bottom,
   zoom,
   onMove,
+  imagePreview,
   onDragStart,
   onDragEnd,
 }: Props) {
   const uid = useId().replace(/:/g, "");
   const clipId = `art-${uid}`,
     shadowId = `shadow-${uid}`;
-  const contours = useMemo(() => (art ? artContours(p, art) : []), [p, art]);
+  const contours = useMemo(
+    () => (art && !imagePreview ? artContours(p, art) : []),
+    [p, art, imagePreview],
+  );
+  const painted = useMemo(
+    () => (art && !imagePreview ? paintContours(p, art) : []),
+    [p, art, imagePreview],
+  );
+  const imageUnit = art
+    ? (p.diameter * p.artScale) / 100 / Math.max(art.width, art.height)
+    : 1;
   const drag = useRef<{ x: number; y: number; px: number; py: number } | null>(
     null,
   );
@@ -124,15 +137,43 @@ export default function FlatPreview({
         />
         {!bottom && (
           <g clipPath={`url(#${clipId})`}>
-            {contours.map((loops, i) =>
-              (p.mapping[i] ?? i) === 0 ? null : (
-                <path
-                  key={i}
-                  d={pathData(loops)}
-                  fill={p.colors[p.mapping[i] ?? i]}
-                  fillRule="evenodd"
+            {imagePreview && art ? (
+              <g
+                transform={`translate(${p.artX} ${-p.artY}) rotate(${-p.rotation}) scale(${p.mirror ? -1 : 1} 1)`}
+              >
+                <image
+                  data-testid="live-cleanup-preview"
+                  href={imagePreview}
+                  x={(-art.width * imageUnit) / 2}
+                  y={(-art.height * imageUnit) / 2}
+                  width={art.width * imageUnit}
+                  height={art.height * imageUnit}
+                  preserveAspectRatio="none"
                 />
-              ),
+              </g>
+            ) : (
+              <>
+                {contours.map((loops, i) =>
+                  (p.mapping[i] ?? i) === 0 ? null : (
+                    <path
+                      key={i}
+                      d={pathData(loops)}
+                      fill={p.colors[p.mapping[i] ?? i]}
+                      fillRule="evenodd"
+                    />
+                  ),
+                )}
+                {painted.map((loops, slot) =>
+                  slot === 0 ? null : (
+                    <path
+                      key={`paint-${slot}`}
+                      d={pathData(loops)}
+                      fill={p.colors[slot]}
+                      fillRule="evenodd"
+                    />
+                  ),
+                )}
+              </>
             )}
           </g>
         )}

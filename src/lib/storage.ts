@@ -99,7 +99,15 @@ export function parseProject(value: unknown): Project {
     throw new Error("Invalid color map.");
   p.mapping = obj.mapping as number[];
   p.name = p.name.slice(0, 80) || "My coaster";
-  p.detail = [192, 320, 512, 768].includes(p.detail) ? p.detail : 512;
+  p.detail = [192, 320, 512, 768, 1024].includes(p.detail) ? p.detail : 512;
+  if (
+    p.cleanupMask &&
+    (!/^data:image\/png;base64,/i.test(p.cleanupMask) ||
+      p.cleanupMask.length > 12e6)
+  )
+    throw new Error(
+      "Invalid image cleanup layer. Use a CoasterGen project file.",
+    );
   if (
     p.source &&
     (!/^data:image\/(png|jpeg|webp|svg\+xml)[;,]/i.test(p.source) ||

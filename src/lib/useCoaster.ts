@@ -6,6 +6,7 @@ import {
   type Project,
 } from "../types";
 import { SAMPLES, svgDataUrl } from "../samples";
+import { loadCleanupMask } from "./cleanup";
 import { loadPixels } from "./image";
 import { generateModel, vectorizeImage } from "./engine";
 import { loadLocal, saveLocal } from "./storage";
@@ -34,6 +35,8 @@ export const artworkKey = (p: Project) =>
     p.detail,
     p.smoothEdges,
     p.sourcePalette,
+    p.preserveDetails,
+    sourceId(p.cleanupMask),
   ]);
 const geometryKey = (p: Project, key: string) =>
   JSON.stringify([
@@ -233,12 +236,20 @@ export function useCoaster() {
           );
         const image = await loadPixels(source, snapshot.detail);
         if (!active) return;
+        const overrides = await loadCleanupMask(
+          snapshot.cleanupMask,
+          image.width,
+          image.height,
+        );
+        if (!active) return;
         const result = await vectorizeImage({
           ...image,
           count: snapshot.colorCount,
           base: snapshot.matchBase,
           remove: snapshot.removeBackground,
           smooth: snapshot.smoothEdges,
+          preserveDetails: snapshot.preserveDetails,
+          overrides,
           palette:
             snapshot.sourcePalette.length === snapshot.colorCount
               ? snapshot.sourcePalette

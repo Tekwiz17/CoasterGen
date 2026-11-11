@@ -1,11 +1,17 @@
 import type { Artwork, Project } from "../types";
-import { artContours, outlines } from "./geometry";
+import { artContours, paintContours, outlines } from "./geometry";
 export type Alignment =
   "left" | "centerX" | "right" | "top" | "centerY" | "bottom" | "center";
 export function alignmentTargets(p: Project, art: Artwork) {
-  const points = artContours({ ...p, artX: 0, artY: 0 }, art).flatMap(
-    (loops, i) => ((p.mapping[i] ?? i) === 0 ? [] : loops.flat()),
-  );
+  const centered = { ...p, artX: 0, artY: 0 };
+  const points = [
+    ...artContours(centered, art).flatMap((loops, i) =>
+      (p.mapping[i] ?? i) === 0 ? [] : loops.flat(),
+    ),
+    ...paintContours(centered, art).flatMap((loops, i) =>
+      i === 0 ? [] : loops.flat(),
+    ),
+  ];
   if (!points.length) points.push([0, 0]);
   let minX = Infinity,
     maxX = -Infinity,
