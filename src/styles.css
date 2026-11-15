@@ -3208,3 +3208,26 @@ fieldset.import-settings {
 .spit-preview-controls label {
   min-width: 150px;
 }
+
+.connection-view-tools {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 9px;
+  padding: 12px 20px;
+  background: #f7faf5;
+  border-bottom: 1px solid #e0e8dd;
+}
+.connection-view-tools button[aria-pressed="true"] {
+  background: #e4f1e3;
+  border-color: #7eac89;
+  color: #28663f;
+}
+.connection-view-tools label {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  color: #5f775e;
+}

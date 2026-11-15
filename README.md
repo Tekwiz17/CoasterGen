@@ -96,3 +96,5 @@ Downloads include individual bed-aligned 3MF/STL parts, a separated print layout
 SpitGen parser/fit/export regressions are included in `npm test`. Browser coverage lives in `tests/e2e/makergen.spec.ts`.
 
 SpitGen recommends a fit using actual separated solids, available connector locations, dimensions and solid volume. The recommendation is a starting point, with a reason and an explicit Apply button; manual fit choices stay yours. The preview opens assembled, offers individual-part inspection, preserves its frame while fits update, and uses source material colors without lighting/tone-map changes.
+
+Use **See connections** to turn real mating faces upward and separate them for inspection. Snap slits, pin heads and matching socket openings come from the exported mesh. **Surface detail** adds shading/edge definition; switch it off for unlit colors. Spacing is relative to the model size, and Assembly/Reset restores the assembled preview. None of these preview controls changes exported geometry.

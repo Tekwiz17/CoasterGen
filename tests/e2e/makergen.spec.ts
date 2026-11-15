@@ -163,3 +163,54 @@ test("upload recommendations, original colors and a steady inspectable preview",
     ),
   ).toBe(true);
 });
+
+test("connection view reveals fit geometry with adjustable spacing and detail", async ({
+  page,
+}) => {
+  test.setTimeout(120000);
+  await page.goto("/#/spitgen");
+  await page
+    .getByRole("button", { name: "Try a sample model", exact: true })
+    .click();
+  const save = page.getByRole("button", {
+    name: "Download all pieces",
+    exact: true,
+  });
+  await expect(save).toBeEnabled({ timeout: 60000 });
+  await page.getByRole("button", { name: /^SnapFit/ }).click();
+  await expect(save).toBeEnabled({ timeout: 60000 });
+  await page
+    .getByRole("button", { name: "See connections", exact: true })
+    .click();
+  await expect(
+    page.getByRole("button", { name: "See connections", exact: true }),
+  ).toHaveAttribute("aria-pressed", "true");
+  await expect(page.getByText(/Mating faces are turned upward/)).toBeVisible();
+  await page.getByLabel("Explode view", { exact: true }).fill("80");
+  await expect(page.getByLabel("Explode view", { exact: true })).toHaveValue(
+    "80",
+  );
+  await page
+    .getByRole("checkbox", { name: "Surface detail", exact: true })
+    .uncheck();
+  await page.getByLabel("Inspect part", { exact: true }).selectOption("1");
+  await expect(page.locator(".spit-canvas canvas")).toBeVisible();
+  const event = page.waitForEvent("download");
+  await save.click();
+  const files = unzipSync(await readFile((await (await event).path())!));
+  expect(read3mf(files["assembly-reference.3mf"])).toHaveLength(2);
+  await page
+    .getByRole("button", { name: "Reset model view", exact: true })
+    .click();
+  await expect(page.getByLabel("Explode view", { exact: true })).toHaveValue(
+    "0",
+  );
+  await expect(
+    page.getByRole("button", { name: "Assembly", exact: true }),
+  ).toHaveAttribute("aria-pressed", "true");
+  expect(
+    await page.evaluate(
+      () => document.documentElement.scrollWidth <= innerWidth,
+    ),
+  ).toBe(true);
+});

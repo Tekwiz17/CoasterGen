@@ -94,6 +94,7 @@ export function splitModel(
     if (parts.length > 64)
       throw Error("More than 64 pieces. Try Color or Color + group grouping.");
     let connectors = 0;
+    const joints: NonNullable<SplitResult["joints"]> = [];
     const warnings: string[] = [];
     const radius = diameter / 2;
     // Test candidate interfaces against the actual solids, not just bounding boxes.
@@ -241,6 +242,7 @@ export function splitModel(
             continue;
           parts[a].solid = attached;
           parts[b].solid = cut;
+          joints.push({ a, b, point: [...p], normal: [...n] });
           connectors++;
           joined = true;
           break;
@@ -263,7 +265,7 @@ export function splitModel(
         volume: solid.volume(),
       };
     });
-    return { parts: output, warnings, connectors };
+    return { parts: output, warnings, connectors, joints };
   } finally {
     for (let i = refs.length - 1; i >= 0; i--) refs[i].delete();
   }

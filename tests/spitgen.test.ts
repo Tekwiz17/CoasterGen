@@ -143,3 +143,37 @@ test("fit recommendation responds to part size and separation", async () => {
   );
   assert.equal(recommendFit(separated).fit, "GlueFit");
 });
+
+test("connection preview exposes mating faces and never changes exported geometry", async () => {
+  const { splitPreview } = await import("../src/lib/splitpreview");
+  const result = splitModel(api, blocks(), "groups", "SnapFit", 0.2, 3);
+  const original = result.parts.map((p) => p.positions.slice());
+  assert.equal(result.joints?.length, 1);
+  assert.equal(result.joints![0].a, 0);
+  assert.equal(result.joints![0].b, 1);
+  const view = splitPreview(result, 35, -1, true);
+  assert.equal(view.model.parts.length, 2);
+  const z = view.model.parts[0].positions.filter((_, i) => i % 3 === 2);
+  assert.ok(
+    Math.max(...z) > 18,
+    "male pin points upward above the original 18 mm body",
+  );
+  const bounds = view.model.parts.map((p) => {
+    const xs = p.positions.filter((_, i) => i % 3 === 0);
+    return { min: Math.min(...xs), max: Math.max(...xs) };
+  });
+  assert.ok(
+    bounds[0].max < bounds[1].min,
+    "inspection layout separates the parts",
+  );
+  for (let i = 0; i < original.length; i++)
+    assert.deepEqual(result.parts[i].positions, original[i]);
+  assert.equal(splitPreview(result, 0, 1, true).model.parts.length, 1);
+  const assembled = splitPreview(result, 0, -1, false),
+    spread = splitPreview(result, 100, -1, false);
+  assert.ok(spread.project.diameter > assembled.project.diameter);
+  assert.deepEqual(
+    assembled.model.parts.map((p) => p.indices.length),
+    spread.model.parts.map((p) => p.indices.length),
+  );
+});

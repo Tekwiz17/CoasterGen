@@ -11,6 +11,7 @@ export interface SplitResult {
   parts: SplitPart[];
   warnings: string[];
   connectors: number;
+  joints?: { a: number; b: number; point: number[]; normal: number[] }[];
   bounds?: { min: number[]; max: number[] };
   recommendation?: { fit: Fit; reason: string };
 }

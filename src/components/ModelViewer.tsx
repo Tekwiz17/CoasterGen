@@ -10,6 +10,7 @@ interface Props {
   reset: number;
   onFailure: () => void;
   trueColors?: boolean;
+  detail?: boolean;
 }
 export default function ModelViewer({
   model,
@@ -19,6 +20,7 @@ export default function ModelViewer({
   reset,
   onFailure,
   trueColors = false,
+  detail = false,
 }: Props) {
   const host = useRef<HTMLDivElement>(null);
   const state = useRef<{
@@ -113,7 +115,7 @@ export default function ModelViewer({
       observer.disconnect();
       controls.dispose();
       group.traverse((o) => {
-        if (o instanceof THREE.Mesh) {
+        if (o instanceof THREE.Mesh || o instanceof THREE.LineSegments) {
           o.geometry.dispose();
           (o.material as THREE.Material).dispose();
         }
@@ -131,8 +133,15 @@ export default function ModelViewer({
     while (s.group.children.length) {
       const o = s.group.children[0] as THREE.Mesh;
       s.group.remove(o);
-      o.geometry.dispose();
-      (o.material as THREE.Material).dispose();
+      o.traverse((child) => {
+        if (
+          child instanceof THREE.Mesh ||
+          child instanceof THREE.LineSegments
+        ) {
+          child.geometry.dispose();
+          (child.material as THREE.Material).dispose();
+        }
+      });
     }
     for (const part of model?.parts ?? []) {
       const indexed = new THREE.BufferGeometry();
@@ -144,23 +153,37 @@ export default function ModelViewer({
       const geo = indexed.toNonIndexed();
       indexed.dispose();
       geo.computeVertexNormals();
-      const mat = trueColors
-        ? new THREE.MeshBasicMaterial({
-            color: project.colors[part.colorIndex] ?? project.colors[0],
-            toneMapped: false,
-          })
-        : new THREE.MeshStandardMaterial({
-            color: project.colors[part.colorIndex] ?? project.colors[0],
-            roughness: 0.7,
-            metalness: 0,
-          });
+      const mat =
+        trueColors && !detail
+          ? new THREE.MeshBasicMaterial({
+              color: project.colors[part.colorIndex] ?? project.colors[0],
+              toneMapped: false,
+            })
+          : new THREE.MeshStandardMaterial({
+              color: project.colors[part.colorIndex] ?? project.colors[0],
+              roughness: 0.7,
+              metalness: 0,
+              toneMapped: !trueColors,
+              flatShading: detail,
+            });
       const mesh = new THREE.Mesh(geo, mat);
       mesh.castShadow = true;
       mesh.receiveShadow = true;
+      if (detail) {
+        const edges = new THREE.LineSegments(
+          new THREE.EdgesGeometry(geo, 28),
+          new THREE.LineBasicMaterial({
+            color: 0x19372b,
+            transparent: true,
+            opacity: 0.35,
+          }),
+        );
+        mesh.add(edges);
+      }
       s.group.add(mesh);
     }
     s.render();
-  }, [model, trueColors]);
+  }, [model, trueColors, detail]);
   useEffect(() => {
     const s = state.current;
     if (!s) return;

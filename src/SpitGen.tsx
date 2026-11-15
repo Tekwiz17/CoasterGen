@@ -1,3 +1,4 @@
+import { splitPreview } from "./lib/splitpreview";
 import { lazy, Suspense, useEffect, useMemo, useRef, useState } from "react";
 import PartsPreview from "./components/PartsPreview";
 import {
@@ -32,6 +33,8 @@ export default function SpitGen() {
     [failure, setFailure] = useState(false),
     [reset, setReset] = useState(0),
     [busyExport, setBusyExport] = useState(false);
+  const [connections, setConnections] = useState(false);
+  const [detail, setDetail] = useState(true);
   const [isolated, setIsolated] = useState(-1);
   const input = useRef<HTMLInputElement>(null);
   const busy = !!progress;
@@ -39,6 +42,7 @@ export default function SpitGen() {
     setResult(null);
     setIsolated(-1);
     setExplode(0);
+    setConnections(false);
     setFailure(false);
   }, [source]);
   useEffect(() => {
@@ -96,62 +100,11 @@ export default function SpitGen() {
       setError("This file could not be read. Try it again.");
     }
   }
-  const preview = useMemo(() => {
-    if (!result) return null;
-    const min = [Infinity, Infinity, Infinity],
-      max = [-Infinity, -Infinity, -Infinity];
-    for (const p of result.parts)
-      for (let i = 0; i < p.positions.length; i++) {
-        min[i % 3] = Math.min(min[i % 3], p.positions[i]);
-        max[i % 3] = Math.max(max[i % 3], p.positions[i]);
-      }
-    if (result.bounds) {
-      min.splice(0, 3, ...result.bounds.min);
-      max.splice(0, 3, ...result.bounds.max);
-    }
-    const center = min.map((v, i) => (v + max[i]) / 2),
-      d = Math.max(...max.map((v, i) => v - min[i]), 20);
-    const colors = result.parts.map((p) => p.color);
-    const parts = result.parts.map((p, j) => {
-      const c = [0, 0, 0];
-      for (let i = 0; i < p.positions.length; i++)
-        c[i % 3] += p.positions[i] / (p.positions.length / 3);
-      let dir = c.map((v, i) => v - center[i]);
-      const len = Math.hypot(...dir);
-      dir = len > 0.01 ? dir.map((v) => v / len) : [j % 2 ? 1 : -1, 0, 0];
-      return {
-        ...p,
-        colorIndex: j,
-        positions: p.positions.map(
-          (v, i) => v - center[i % 3] + dir[i % 3] * explode,
-        ),
-      };
-    });
-    let floor = Infinity,
-      ceiling = -Infinity;
-    for (const p of parts)
-      for (let i = 2; i < p.positions.length; i += 3) {
-        floor = Math.min(floor, p.positions[i]);
-        ceiling = Math.max(ceiling, p.positions[i]);
-      }
-    for (const p of parts)
-      for (let i = 2; i < p.positions.length; i += 3)
-        p.positions[i] += center[2] - min[2] + explode;
-    return {
-      model: {
-        parts: isolated < 0 ? parts : parts.filter((_, i) => i === isolated),
-        volume: result.parts.reduce((n, p) => n + p.volume, 0),
-        triangles: parts.reduce((n, p) => n + p.indices.length / 3, 0),
-        warnings: [],
-      } as ModelData,
-      project: {
-        ...DEFAULT_PROJECT,
-        colors,
-        diameter: d + explode * 2,
-        thickness: max[2] - min[2] + explode * 2,
-      },
-    };
-  }, [result, explode, isolated]);
+  const preview = useMemo(
+    () =>
+      result ? splitPreview(result, explode, isolated, connections) : null,
+    [result, explode, isolated, connections],
+  );
   function save() {
     if (!result || !source) return;
     setBusyExport(true);
@@ -275,9 +228,43 @@ export default function SpitGen() {
                     Updating fit… Preview stays in place.
                   </p>
                 )}
+                <div
+                  className="connection-view-tools"
+                  role="group"
+                  aria-label="Preview layout"
+                >
+                  <button
+                    className="button light small"
+                    aria-pressed={!connections}
+                    onClick={() => setConnections(false)}
+                  >
+                    Assembly
+                  </button>
+                  <button
+                    className="button light small"
+                    aria-pressed={connections}
+                    disabled={!result?.joints?.length}
+                    onClick={() => {
+                      setConnections(true);
+                      setExplode(35);
+                      setReset((v) => v + 1);
+                    }}
+                  >
+                    See connections
+                  </button>
+                  <label>
+                    <input
+                      type="checkbox"
+                      checked={detail}
+                      onChange={(e) => setDetail(e.target.checked)}
+                    />
+                    Surface detail
+                  </label>
+                </div>
                 <div className="spit-canvas">
                   {failure ? (
                     <PartsPreview
+                      detail={detail}
                       model={preview.model}
                       project={preview.project}
                     />
@@ -285,6 +272,7 @@ export default function SpitGen() {
                     <Suspense fallback={<p>Loading preview…</p>}>
                       <ModelViewer
                         trueColors
+                        detail={detail}
                         model={preview.model}
                         project={preview.project}
                         bottom={false}
@@ -309,12 +297,12 @@ export default function SpitGen() {
                     ))}
                   </select>
                   <label>
-                    Explode view
+                    Spacing {explode}%
                     <input
                       aria-label="Explode view"
                       type="range"
                       min="0"
-                      max="60"
+                      max="100"
                       value={explode}
                       onChange={(e) => setExplode(Number(e.target.value))}
                     />
@@ -324,6 +312,7 @@ export default function SpitGen() {
                     aria-label="Reset model view"
                     onClick={() => {
                       setExplode(0);
+                      setConnections(false);
                       setReset((v) => v + 1);
                     }}
                   >
@@ -333,7 +322,10 @@ export default function SpitGen() {
                 <p className="control-note">
                   {failure ? "Basic preview. " : "Drag to orbit. "} Explode only
                   changes the preview; your assembly keeps its original
-                  coordinates.
+                  coordinates.{" "}
+                  {connections
+                    ? "Mating faces are turned upward so you can inspect actual pins, slits and sockets."
+                    : "Choose See connections to reveal hidden mating faces."}
                 </p>
               </>
             ) : (

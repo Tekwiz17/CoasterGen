@@ -4,9 +4,11 @@ import type { ModelData, Project } from "../types";
 export default function PartsPreview({
   model,
   project,
+  detail = false,
 }: {
   model: ModelData;
   project: Project;
+  detail?: boolean;
 }) {
   const ref = useRef<HTMLCanvasElement>(null);
   useEffect(() => {
@@ -29,7 +31,7 @@ export default function PartsPreview({
       const projectPoint = (x: number, y: number, z: number) => [
         (x - y) * 0.866,
         (x + y) * 0.42 - z,
-        x + y + z,
+        x + y + 0.84 * z,
       ];
       for (const part of model.parts) {
         const p = part.positions,
@@ -54,6 +56,7 @@ export default function PartsPreview({
             u[2] * v[0] - u[0] * v[2],
             u[0] * v[1] - u[1] * v[0],
           ];
+          if (n[0] + n[1] + 0.84 * n[2] <= 0) continue;
           const shade =
             0.73 +
             0.27 *
@@ -65,7 +68,7 @@ export default function PartsPreview({
           const color = project.colors[part.colorIndex]
             .slice(1)
             .match(/../g)!
-            .map((h) => Math.round(parseInt(h, 16)));
+            .map((h) => Math.round(parseInt(h, 16) * (detail ? shade : 1)));
           faces.push({
             points,
             depth: points.reduce((n, p) => n + p[2], 0),
@@ -98,7 +101,7 @@ export default function PartsPreview({
     observer.observe(host);
     draw();
     return () => observer.disconnect();
-  }, [model, project]);
+  }, [model, project, detail]);
   return (
     <canvas
       ref={ref}
