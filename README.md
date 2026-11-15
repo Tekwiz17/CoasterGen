@@ -1,4 +1,8 @@
-# CoasterGen
+# MakerGen
+
+A green, on-device workbench for 3D printing. The home screen links to **CoasterGen** (`/#/coastergen`) and **SpitGen** (`/#/spitgen`). Existing CoasterGen saved projects remain in the same browser database.
+
+## CoasterGen
 
 A small, local design studio for multicolor 3D-printed coasters. Set dimensions, import artwork, preview and map image colors, add underside magnet pockets, and download a colored 3MF.
 
@@ -75,3 +79,18 @@ Image import includes a **Quality** preset: extra-high 1024 px detail, backgroun
 Use **Paint & erase → Fill area**, choose a filament, and click one connected color region. Separate islands keep their color; fills support undo and persist in project files and exports. **Crop image** lets you drag a selection or enter percentages before applying; **Reset crop** restores the original image and its brush edits within the import dialog. **Center** resets X and Y to exactly zero. Mapping menus identify filaments by their actual hex colors.
 
 **Export to MakerWorld** downloads the colored 3MF, opens MakerWorld’s model upload page, and provides optional CoasterGen credit text with a copy button. Upload and publication are completed by the user on MakerWorld. MakerWorld icon: [Dashboard Icons](https://github.com/homarr-labs/dashboard-icons/blob/main/svg/maker-world.svg); brand marks belong to their respective owners.
+
+## SpitGen
+
+Import a 3MF up to 40 MB and separate closed solids by color + named group, color only, or every connected piece. Core materials, color groups, Bambu filament metadata, component files, assembly transforms, and common units are supported. Surface paint, open color shells, gradients and textures require solid parts first.
+
+- **SnapFit:** slotted mushroom pins with matching retention sockets.
+- **ClickFit:** slotted ball studs with matching detent sockets.
+- **GlueFit:** straight alignment pins with adhesive clearance.
+- **TightFit:** tapered friction pins with close clearance.
+
+Connector locations are tested against the actual solids, including 0.35 mm socket walls. If no safe location exists, the UI and assembly guide say so; the parts keep their original surfaces. A sample two-part block is included. Always test fit on your printer/material before a full assembly.
+
+Downloads include individual bed-aligned 3MF/STL parts, a separated print layout, original-coordinate assembly reference, and instructions. Processing runs in a cancellable worker; files never leave the browser.
+
+SpitGen parser/fit/export regressions are included in `npm test`. Browser coverage lives in `tests/e2e/makergen.spec.ts`.

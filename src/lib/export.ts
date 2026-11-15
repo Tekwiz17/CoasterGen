@@ -17,6 +17,7 @@ const n = (v: number) => Number(v.toFixed(6)).toString();
 export function export3mf(
   p: Project,
   model: ModelData,
+  originShift = p.diameter / 2 + 2,
 ): Uint8Array<ArrayBuffer> {
   const resources = [
     `<basematerials id="1">${p.colors
@@ -43,11 +44,11 @@ export function export3mf(
     );
   });
   const groupId = 100,
-    shift = p.diameter / 2 + 2;
+    shift = originShift;
   resources.push(
     `<object id="${groupId}" type="model" name="${xml(p.name)}"><components>${model.parts.map((_, i) => `<component objectid="${i + 2}"/>`).join("")}</components></object>`,
   );
-  const modelXml = `<?xml version="1.0" encoding="UTF-8"?><model unit="millimeter" xml:lang="en-US" xmlns="http://schemas.microsoft.com/3dmanufacturing/core/2015/02"><metadata name="Application">CoasterGen</metadata><metadata name="Title">${xml(p.name)}</metadata><metadata name="BambuStudio:3mfVersion">1</metadata><resources>${resources.join("")}</resources><build><item objectid="${groupId}" transform="1 0 0 0 1 0 0 0 1 ${n(shift)} ${n(shift)} 0"/></build></model>`;
+  const modelXml = `<?xml version="1.0" encoding="UTF-8"?><model unit="millimeter" xml:lang="en-US" xmlns="http://schemas.microsoft.com/3dmanufacturing/core/2015/02"><metadata name="Application">MakerGen</metadata><metadata name="Title">${xml(p.name)}</metadata><metadata name="BambuStudio:3mfVersion">1</metadata><resources>${resources.join("")}</resources><build><item objectid="${groupId}" transform="1 0 0 0 1 0 0 0 1 ${n(shift)} ${n(shift)} 0"/></build></model>`;
   const config = `<?xml version="1.0" encoding="UTF-8"?><config><object id="${groupId}"><metadata key="name" value="${xml(p.name)}"/><metadata key="extruder" value="1"/>${model.parts.map((part, i) => `<part id="${i + 2}" subtype="normal_part"><metadata key="name" value="${xml(part.name)}"/><metadata key="extruder" value="${part.colorIndex + 1}"/><metadata key="matrix" value="1 0 0 0 0 1 0 0 0 0 1 0 0 0 0 1"/><mesh_stat face_count="${part.indices.length / 3}" edges_fixed="0" degenerate_facets="0" facets_removed="0" facets_reversed="0" backwards_edges="0"/></part>`).join("")}</object><plate><metadata key="plater_id" value="1"/><metadata key="plater_name" value="CoasterGen"/><metadata key="locked" value="false"/><model_instance><metadata key="object_id" value="${groupId}"/><metadata key="instance_id" value="0"/><metadata key="identify_id" value="0"/></model_instance></plate></config>`;
   const settings = {
     type: "project",

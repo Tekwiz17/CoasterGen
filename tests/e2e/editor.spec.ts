@@ -18,7 +18,7 @@ async function open(page: Page) {
   await page.addInitScript(() =>
     localStorage.setItem("coastergen-tutorial-v2", "done"),
   );
-  await page.goto("/");
+  await page.goto("/#/coastergen");
   await ready(page);
 }
 async function printStep(page: Page) {
@@ -34,7 +34,7 @@ async function fits(page: Page) {
 test("tutorial supports all steps, skip, replay and persistence", async ({
   page,
 }) => {
-  await page.goto("/");
+  await page.goto("/#/coastergen");
   await expect(page.getByRole("dialog")).toBeVisible();
   for (let i = 0; i < 3; i++)
     await page.getByRole("button", { name: "Next", exact: true }).click();

@@ -1,3 +1,4 @@
+import { MakerMark } from "./MakerGen";
 import { lazy, Suspense, useEffect, useRef, useState } from "react";
 import {
   AlignHorizontalJustifyCenter,
@@ -58,7 +59,7 @@ type Tab = "coaster" | "artwork" | "magnets" | "print";
 const MAKERWORLD_URL =
   "https://makerworld.com/en/my/models/publish?type=original";
 const MAKERWORLD_CREDIT =
-  "Made with CoasterGen — a free, browser-based tool for creating custom multicolor 3D-printed coasters. Make your own: https://coastergen.vercel.app/";
+  "Made with CoasterGen — a free, browser-based tool for creating custom multicolor 3D-printed coasters. Make your own: https://coastergen.vercel.app/#/coastergen";
 type Dialog = "tutorial" | "export" | "bambu" | "makerworld" | "reset" | null;
 const alignmentButtons = [
   { id: "left", label: "Align left", Icon: AlignHorizontalJustifyStart },
@@ -362,14 +363,14 @@ export default function App() {
     <>
       <div className="app-shell" inert={modalOpen}>
         <header className="site-header">
-          <a className="brand" href="/" aria-label="CoasterGen home">
+          <a className="brand" href="#/" aria-label="MakerGen home">
             <span className="brand-mark">
-              <Layers3 size={23} />
+              <MakerMark />
             </span>
-            CoasterGen
+            MakerGen
           </a>
           <span className="header-caption">
-            Custom coasters for 3D printing
+            CoasterGen · Custom coasters for 3D printing
           </span>
           <div className="header-links">
             <button
