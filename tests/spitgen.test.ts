@@ -78,7 +78,11 @@ test("3MF import preserves build/component transforms, names, colors and inch un
   const parts = read3mf(zipSync(archive));
   assert.equal(parts.length, 2);
   assert.equal(parts[0].name, "Body");
-  assert.ok(Math.abs(parts[0].positions[0] - 254) < 0.01);
+  assert.ok(
+    Math.abs(
+      Math.min(...parts[0].positions.filter((_, i) => i % 3 === 0)) - 254,
+    ) < 0.01,
+  );
 });
 test("thin or separated parts export with explicit fit notes instead of fake connectors", () => {
   const p = blocks();
@@ -99,4 +103,43 @@ test("invalid, open and non-solid color shell inputs fail clearly", () => {
     () => splitModel(api, blocks(), "groups", "GlueFit", -1, 3),
     /clearance/,
   );
+});
+
+test("explicit material colors survive inherited Bambu defaults and zero means inherit", () => {
+  const files = unzipSync(part3mf(blocks(), "Color fixture"));
+  const settings = JSON.parse(
+    strFromU8(files["Metadata/project_settings.config"]),
+  );
+  settings.filament_colour = ["#FF00FF", "#00FFFF"];
+  files["Metadata/project_settings.config"] = strToU8(JSON.stringify(settings));
+  const parts = read3mf(zipSync(files));
+  assert.deepEqual(
+    parts.map((p) => p.color),
+    ["#298769", "#E7AE54"],
+  );
+  let text = strFromU8(files["3D/3dmodel.model"]).replace(
+    / pid="1" pindex="\d+"/g,
+    "",
+  );
+  files["3D/3dmodel.model"] = strToU8(text);
+  const config = strFromU8(files["Metadata/model_settings.config"]).replace(
+    /(<part[^>]*>[\s\S]*?key="extruder" value=")\d+/g,
+    "$10",
+  );
+  files["Metadata/model_settings.config"] = strToU8(config);
+  assert.ok(read3mf(zipSync(files)).every((p) => p.color === "#FF00FF"));
+});
+test("fit recommendation responds to part size and separation", async () => {
+  const { recommendFit } = await import("../src/lib/spitrecommend");
+  assert.equal(recommendFit(blocks()).fit, "TightFit");
+  const thin = blocks().map((p) => ({
+    ...p,
+    positions: p.positions.map((v, i) => (i % 3 === 2 ? v / 4 : v)),
+  }));
+  assert.equal(recommendFit(thin).fit, "GlueFit");
+  const separated = blocks();
+  separated[1].positions = separated[1].positions.map((v, i) =>
+    i % 3 === 0 ? v + 30 : v,
+  );
+  assert.equal(recommendFit(separated).fit, "GlueFit");
 });

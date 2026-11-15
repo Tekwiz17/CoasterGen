@@ -65,7 +65,7 @@ export default function PartsPreview({
           const color = project.colors[part.colorIndex]
             .slice(1)
             .match(/../g)!
-            .map((h) => Math.round(parseInt(h, 16) * shade));
+            .map((h) => Math.round(parseInt(h, 16)));
           faces.push({
             points,
             depth: points.reduce((n, p) => n + p[2], 0),
@@ -74,11 +74,11 @@ export default function PartsPreview({
         }
       }
       const scale = Math.min(
-          (width - 60) / (maxX - minX || 1),
-          (height - 90) / (maxY - minY || 1),
+          (width - 60) / (project.diameter * 1.732 || 1),
+          (height - 90) / (project.diameter * 0.84 + project.thickness || 1),
         ),
-        cx = (minX + maxX) / 2,
-        cy = (minY + maxY) / 2;
+        cx = 0,
+        cy = -project.thickness / 2;
       for (const face of faces.sort((a, b) => a.depth - b.depth)) {
         ctx.beginPath();
         face.points.forEach((p, j) => {

@@ -1,6 +1,7 @@
 import Module from "manifold-3d";
 import wasmUrl from "manifold-3d/manifold.wasm?url";
 import { read3mf, type SplitPart } from "./lib/spitgen";
+import { recommendFit, sourceBounds } from "./lib/spitrecommend";
 import { splitModel } from "./lib/spitfit";
 const api = Module({ locateFile: () => wasmUrl }).then((m) => {
   m.setup();
@@ -31,15 +32,20 @@ self.onmessage = async ({ data }) => {
     self.postMessage({
       progress: "Separating solids and checking connector locations…",
     });
+    const result = splitModel(
+      m,
+      parts,
+      data.grouping,
+      data.fit,
+      data.clearance,
+      data.diameter,
+    );
     self.postMessage({
-      result: splitModel(
-        m,
-        parts,
-        data.grouping,
-        data.fit,
-        data.clearance,
-        data.diameter,
-      ),
+      result: {
+        ...result,
+        bounds: sourceBounds(parts),
+        recommendation: recommendFit(result.parts, result.connectors),
+      },
     });
   } catch (e) {
     self.postMessage({ error: (e as Error).message });

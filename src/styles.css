@@ -3174,3 +3174,37 @@ fieldset.import-settings {
     transition: none;
   }
 }
+
+.spit-recommendation {
+  padding: 14px;
+  background: #edf6eb;
+  border: 1px solid #c9ddc7;
+  border-radius: 10px;
+  margin-bottom: 16px;
+}
+.spit-recommendation strong {
+  font-size: 12px;
+  color: #285e3d;
+}
+.spit-recommendation p {
+  font-size: 11px;
+  line-height: 1.7;
+  color: #5c755d;
+  margin: 7px 0;
+}
+.spit-recommendation small {
+  display: block;
+  font-size: 9px;
+  color: #7b8e76;
+  margin-top: 10px;
+}
+.spit-preview-controls {
+  flex-wrap: wrap;
+}
+.spit-preview-controls select {
+  max-width: 100%;
+  font-size: 11px;
+}
+.spit-preview-controls label {
+  min-width: 150px;
+}

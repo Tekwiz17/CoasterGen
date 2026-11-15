@@ -11,6 +11,8 @@ export interface SplitResult {
   parts: SplitPart[];
   warnings: string[];
   connectors: number;
+  bounds?: { min: number[]; max: number[] };
+  recommendation?: { fit: Fit; reason: string };
 }
 const list = (v: any): any[] => (v == null ? [] : Array.isArray(v) ? v : [v]);
 const parser = new XMLParser({
@@ -79,14 +81,24 @@ export function read3mf(bytes: Uint8Array): SplitPart[] {
       JSON.parse(strFromU8(files["Metadata/project_settings.config"]))
         .filament_colour ?? [];
   } catch {}
-  const extruders = new Map<string, number>();
+  const assignments = new Map<
+    string,
+    { base?: number; parts: Map<string, number> }
+  >();
   if (files["Metadata/model_settings.config"]) {
     const config = xml(files["Metadata/model_settings.config"]).config;
-    for (const o of list(config?.object))
-      for (const p of [o, ...list(o.part)]) {
+    for (const o of list(config?.object)) {
+      const slot = (p: any) => {
         const e = list(p.metadata).find((m) => m.key === "extruder");
-        if (e) extruders.set(String(p.id), Number(e.value) - 1);
+        return e && Number(e.value) > 0 ? Number(e.value) - 1 : undefined;
+      };
+      const parts = new Map<string, number>();
+      for (const p of list(o.part)) {
+        const value = slot(p);
+        if (value !== undefined) parts.set(String(p.id), value);
       }
+      assignments.set(String(o.id), { base: slot(o), parts });
+    }
   }
   const models = new Map<string, any>();
   const get = (file: string) => {
@@ -105,6 +117,8 @@ export function read3mf(bytes: Uint8Array): SplitPart[] {
     group: string,
     stack: Set<string>,
     inherited?: number,
+    slots: Map<string, number> = new Map(),
+    rootObject = false,
   ) => {
     const key = file + ":" + id;
     if (stack.has(key) || stack.size > 32)
@@ -116,7 +130,8 @@ export function read3mf(bytes: Uint8Array): SplitPart[] {
       (o) => String(o.id) === String(id),
     );
     if (!obj) throw Error("A model object could not be found.");
-    const extruder = extruders.get(String(id)) ?? inherited;
+    const extruder =
+      (!rootObject ? slots.get(String(id)) : undefined) ?? inherited;
     if (obj.components) {
       for (const c of list(obj.components.component))
         walk(
@@ -126,6 +141,7 @@ export function read3mf(bytes: Uint8Array): SplitPart[] {
           group,
           next,
           extruder,
+          slots,
         );
       return;
     }
@@ -179,11 +195,10 @@ export function read3mf(bytes: Uint8Array): SplitPart[] {
         ...list(resources.colorgroup),
       ].find((r) => String(r.id) === pid);
       const color = String(
-        extruder !== undefined && colors[extruder]
-          ? colors[extruder]
-          : (list(resource?.base)[Number(index)]?.displaycolor ??
-              list(resource?.color)[Number(index)]?.color ??
-              "#70B695"),
+        list(resource?.base)[Number(index)]?.displaycolor ??
+          list(resource?.color)[Number(index)]?.color ??
+          (extruder !== undefined ? colors[extruder] : undefined) ??
+          "#B8C4BC",
       )
         .slice(0, 7)
         .toUpperCase();
@@ -206,13 +221,22 @@ export function read3mf(bytes: Uint8Array): SplitPart[] {
         throw Error(
           "This model has more than 64 color parts. Split a smaller assembly first.",
         );
+      const remap = new Map<number, number>(),
+        compact: number[] = [];
+      const triangles = indices.map((i) => {
+        if (!remap.has(i)) {
+          remap.set(i, remap.size);
+          compact.push(...vertices[i]);
+        }
+        return remap.get(i)!;
+      });
       result.push({
         name: String(obj.name ?? `Part ${id}`),
         group,
         color,
         colorIndex: 0,
-        positions: new Float32Array(vertices.flat()),
-        indices: new Uint32Array(indices),
+        positions: new Float32Array(compact),
+        indices: new Uint32Array(triangles),
         volume: 0,
       });
     }
@@ -225,6 +249,9 @@ export function read3mf(bytes: Uint8Array): SplitPart[] {
       [matrix(item.transform)],
       `Group ${i + 1}`,
       new Set(),
+      assignments.get(String(item.objectid))?.base,
+      assignments.get(String(item.objectid))?.parts,
+      true,
     );
   if (!result.length) throw Error("No printable mesh objects found.");
   return result;

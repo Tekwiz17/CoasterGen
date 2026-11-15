@@ -94,3 +94,5 @@ Connector locations are tested against the actual solids, including 0.35 mm sock
 Downloads include individual bed-aligned 3MF/STL parts, a separated print layout, original-coordinate assembly reference, and instructions. Processing runs in a cancellable worker; files never leave the browser.
 
 SpitGen parser/fit/export regressions are included in `npm test`. Browser coverage lives in `tests/e2e/makergen.spec.ts`.
+
+SpitGen recommends a fit using actual separated solids, available connector locations, dimensions and solid volume. The recommendation is a starting point, with a reason and an explicit Apply button; manual fit choices stay yours. The preview opens assembled, offers individual-part inspection, preserves its frame while fits update, and uses source material colors without lighting/tone-map changes.

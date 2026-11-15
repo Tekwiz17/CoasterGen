@@ -117,3 +117,49 @@ test("SpitGen rejects invalid input and recovers with another model", async ({
     page.getByRole("button", { name: "Download all pieces" }),
   ).toBeEnabled({ timeout: 60000 });
 });
+
+test("upload recommendations, original colors and a steady inspectable preview", async ({
+  page,
+}) => {
+  test.setTimeout(120000);
+  await page.goto("/#/spitgen");
+  await page
+    .getByRole("button", { name: "Try a sample model", exact: true })
+    .click();
+  const save = page.getByRole("button", {
+    name: "Download all pieces",
+    exact: true,
+  });
+  await expect(save).toBeEnabled({ timeout: 60000 });
+  await expect(
+    page.getByText("Recommended: TightFit", { exact: true }),
+  ).toBeVisible();
+  await expect(page.getByLabel("Explode view", { exact: true })).toHaveValue(
+    "0",
+  );
+  await page.getByLabel("Inspect part", { exact: true }).selectOption("0");
+  const canvas = page.locator(".spit-canvas canvas");
+  await expect(canvas).toBeVisible({ timeout: 30000 });
+  const handle = (await canvas.elementHandle())!;
+  await page.getByRole("button", { name: "Use TightFit", exact: true }).click();
+  await expect(save).toBeEnabled({ timeout: 60000 });
+  expect(await handle.evaluate((el) => el.isConnected)).toBe(true);
+  await expect(page.getByLabel("Inspect part", { exact: true })).toHaveValue(
+    "0",
+  );
+  await expect(page.getByLabel("Explode view", { exact: true })).toHaveValue(
+    "0",
+  );
+  await page.getByLabel("Inspect part", { exact: true }).selectOption("1");
+  const event = page.waitForEvent("download");
+  await save.click();
+  const files = unzipSync(await readFile((await (await event).path())!));
+  const parts = read3mf(files["assembly-reference.3mf"]);
+  expect(parts).toHaveLength(2);
+  expect(parts.map((p) => p.color)).toEqual(["#298769", "#E7AE54"]);
+  expect(
+    await page.evaluate(
+      () => document.documentElement.scrollWidth <= innerWidth,
+    ),
+  ).toBe(true);
+});

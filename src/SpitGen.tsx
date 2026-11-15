@@ -28,18 +28,23 @@ export default function SpitGen() {
     [result, setResult] = useState<SplitResult | null>(null),
     [progress, setProgress] = useState(""),
     [error, setError] = useState(""),
-    [explode, setExplode] = useState(18),
+    [explode, setExplode] = useState(0),
     [failure, setFailure] = useState(false),
     [reset, setReset] = useState(0),
     [busyExport, setBusyExport] = useState(false);
+  const [isolated, setIsolated] = useState(-1);
   const input = useRef<HTMLInputElement>(null);
   const busy = !!progress;
   useEffect(() => {
-    if (!source) return;
     setResult(null);
+    setIsolated(-1);
+    setExplode(0);
+    setFailure(false);
+  }, [source]);
+  useEffect(() => {
+    if (!source) return;
     setError("");
     setProgress("Opening your model…");
-    setFailure(false);
     const w = new Worker(new URL("./spit.worker.ts", import.meta.url), {
       type: "module",
     });
@@ -53,8 +58,15 @@ export default function SpitGen() {
       else {
         clearTimeout(timer);
         setProgress("");
-        if (data.error) setError(data.error);
-        else setResult(data.result);
+        if (data.error) {
+          setError(data.error);
+          setResult(null);
+        } else {
+          setResult(data.result);
+          setIsolated((previous) =>
+            previous < data.result.parts.length ? previous : -1,
+          );
+        }
         w.terminate();
       }
     };
@@ -93,6 +105,10 @@ export default function SpitGen() {
         min[i % 3] = Math.min(min[i % 3], p.positions[i]);
         max[i % 3] = Math.max(max[i % 3], p.positions[i]);
       }
+    if (result.bounds) {
+      min.splice(0, 3, ...result.bounds.min);
+      max.splice(0, 3, ...result.bounds.max);
+    }
     const center = min.map((v, i) => (v + max[i]) / 2),
       d = Math.max(...max.map((v, i) => v - min[i]), 20);
     const colors = result.parts.map((p) => p.color);
@@ -119,10 +135,11 @@ export default function SpitGen() {
         ceiling = Math.max(ceiling, p.positions[i]);
       }
     for (const p of parts)
-      for (let i = 2; i < p.positions.length; i += 3) p.positions[i] -= floor;
+      for (let i = 2; i < p.positions.length; i += 3)
+        p.positions[i] += center[2] - min[2] + explode;
     return {
       model: {
-        parts,
+        parts: isolated < 0 ? parts : parts.filter((_, i) => i === isolated),
         volume: result.parts.reduce((n, p) => n + p.volume, 0),
         triangles: parts.reduce((n, p) => n + p.indices.length / 3, 0),
         warnings: [],
@@ -131,10 +148,10 @@ export default function SpitGen() {
         ...DEFAULT_PROJECT,
         colors,
         diameter: d + explode * 2,
-        thickness: ceiling - floor,
+        thickness: max[2] - min[2] + explode * 2,
       },
     };
-  }, [result, explode]);
+  }, [result, explode, isolated]);
   function save() {
     if (!result || !source) return;
     setBusyExport(true);
@@ -239,7 +256,7 @@ export default function SpitGen() {
                 </button>
                 <small>Up to 40 MB · Processed on your device</small>
               </div>
-            ) : busy ? (
+            ) : busy && !result ? (
               <div className="spit-empty" role="status">
                 <LoaderCircle className="spin" size={28} />
                 <h2>Finding the right split.</h2>
@@ -253,6 +270,11 @@ export default function SpitGen() {
               </div>
             ) : preview ? (
               <>
+                {busy && (
+                  <p className="control-note" role="status">
+                    Updating fit… Preview stays in place.
+                  </p>
+                )}
                 <div className="spit-canvas">
                   {failure ? (
                     <PartsPreview
@@ -262,6 +284,7 @@ export default function SpitGen() {
                   ) : (
                     <Suspense fallback={<p>Loading preview…</p>}>
                       <ModelViewer
+                        trueColors
                         model={preview.model}
                         project={preview.project}
                         bottom={false}
@@ -273,6 +296,18 @@ export default function SpitGen() {
                   )}
                 </div>
                 <div className="spit-preview-controls">
+                  <select
+                    aria-label="Inspect part"
+                    value={isolated}
+                    onChange={(e) => setIsolated(Number(e.target.value))}
+                  >
+                    <option value={-1}>All {result?.parts.length} parts</option>
+                    {result?.parts.map((p, i) => (
+                      <option key={i} value={i}>
+                        {i + 1}. {p.name} · {p.color}
+                      </option>
+                    ))}
+                  </select>
                   <label>
                     Explode view
                     <input
@@ -288,7 +323,7 @@ export default function SpitGen() {
                     className="icon-button"
                     aria-label="Reset model view"
                     onClick={() => {
-                      setExplode(18);
+                      setExplode(0);
                       setReset((v) => v + 1);
                     }}
                   >
@@ -350,6 +385,27 @@ export default function SpitGen() {
               <span>2</span>
               <h2>Choose your fit</h2>
             </div>
+            {result?.recommendation && (
+              <div className="spit-recommendation" role="status">
+                <strong>Recommended: {result.recommendation.fit}</strong>
+                <p>{result.recommendation.reason}</p>
+                {fit !== result.recommendation.fit && (
+                  <button
+                    className="button light small"
+                    onClick={() => {
+                      setFit(result.recommendation!.fit);
+                      setClearance(FITS[result.recommendation!.fit].clearance);
+                    }}
+                  >
+                    Use {result.recommendation.fit}
+                  </button>
+                )}
+                <small>
+                  Geometry-based starting point. Material and calibration affect
+                  the fit.
+                </small>
+              </div>
+            )}
             <div className="fit-options">
               {(Object.keys(FITS) as Fit[]).map((name) => (
                 <button
@@ -407,7 +463,7 @@ export default function SpitGen() {
             </div>
             <button
               className="button primary full"
-              disabled={!result || busy || busyExport}
+              disabled={!result || busy || busyExport || !!error}
               onClick={save}
             >
               <Download size={17} />

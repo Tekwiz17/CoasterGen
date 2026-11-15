@@ -9,6 +9,7 @@ interface Props {
   zoom: number;
   reset: number;
   onFailure: () => void;
+  trueColors?: boolean;
 }
 export default function ModelViewer({
   model,
@@ -17,6 +18,7 @@ export default function ModelViewer({
   zoom,
   reset,
   onFailure,
+  trueColors = false,
 }: Props) {
   const host = useRef<HTMLDivElement>(null);
   const state = useRef<{
@@ -142,18 +144,23 @@ export default function ModelViewer({
       const geo = indexed.toNonIndexed();
       indexed.dispose();
       geo.computeVertexNormals();
-      const mat = new THREE.MeshStandardMaterial({
-        color: project.colors[part.colorIndex] ?? project.colors[0],
-        roughness: 0.7,
-        metalness: 0,
-      });
+      const mat = trueColors
+        ? new THREE.MeshBasicMaterial({
+            color: project.colors[part.colorIndex] ?? project.colors[0],
+            toneMapped: false,
+          })
+        : new THREE.MeshStandardMaterial({
+            color: project.colors[part.colorIndex] ?? project.colors[0],
+            roughness: 0.7,
+            metalness: 0,
+          });
       const mesh = new THREE.Mesh(geo, mat);
       mesh.castShadow = true;
       mesh.receiveShadow = true;
       s.group.add(mesh);
     }
     s.render();
-  }, [model]);
+  }, [model, trueColors]);
   useEffect(() => {
     const s = state.current;
     if (!s) return;
