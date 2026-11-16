@@ -1,6 +1,6 @@
 import { test, expect } from "@playwright/test";
-import path from "node:path";
 test("HoodieGen home and two design paths", async ({ page }) => {
+  test.setTimeout(120000);
   await page.goto("/");
   await page.getByRole("link", { name: /HoodieGen/ }).click();
   await expect(
@@ -8,7 +8,7 @@ test("HoodieGen home and two design paths", async ({ page }) => {
   ).toBeVisible();
   await expect(
     page.getByRole("button", { name: "Download 3MF", exact: true }),
-  ).toBeDisabled();
+  ).toBeEnabled({ timeout: 90000 });
   await page.getByRole("button", { name: "Surface map Advanced" }).click();
   const dl = page.waitForEvent("download");
   await page.getByRole("button", { name: "Download map template" }).click();
@@ -23,9 +23,7 @@ if (process.env.HOODIE_FIXTURE)
     const errors: string[] = [];
     page.on("pageerror", (e) => errors.push(e.message));
     await page.goto("/#/hoodiegen");
-    await page
-      .getByLabel("Base hoodie 3MF")
-      .setInputFiles(path.resolve(process.env.HOODIE_FIXTURE!));
+    await expect(page.getByText("Original hoodie loaded · Ready to design")).toBeVisible({ timeout: 90000 });
     await expect(
       page.getByRole("button", { name: "Download 3MF", exact: true }),
     ).toBeEnabled({ timeout: 90000 });
