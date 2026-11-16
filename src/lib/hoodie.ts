@@ -166,7 +166,7 @@ export function colorHoodie(h: Hoodie, d: Design) {
         u[0] * v[1] - u[1] * v[0],
       ];
     let slot = 0;
-    if (d.mode === "map") {
+    if (d.mode === "map" && n[0]*p[0]+n[1]*p[1] > 0) {
       const uv = atlasUV(p[0], p[1], p[2], h.height, 125);
       slot = sample(d.map, uv[0], uv[1], 0);
     } else if (d.mode === "image") {

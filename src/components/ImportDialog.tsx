@@ -44,17 +44,17 @@ export default function ImportDialog({
   const [source, setSource] = useState(initialSource);
   const [cropping, setCropping] = useState(false);
   const editingExisting =
-    preservePlacement || (!!project.source && initialSource === project.source);
+    context === "coaster" && (preservePlacement || (!!project.source && initialSource === project.source));
   const [count, setCount] = useState(project.colorCount);
   const [remove, setRemove] = useState(
-    editingExisting ? project.removeBackground : false,
+    editingExisting ? project.removeBackground : true,
   );
   const [smooth, setSmooth] = useState(
     editingExisting ? project.smoothEdges : true,
   );
-  const [preserve, setPreserve] = useState(project.preserveDetails);
+  const [preserve, setPreserve] = useState(editingExisting ? project.preserveDetails : false);
   const [detail, setDetail] = useState(
-    editingExisting ? project.detail : Math.max(768, project.detail),
+    editingExisting ? project.detail : 1024,
   );
   const quality = !preserve && remove && smooth && detail === 1024;
   const [edits, setEdits] = useState([
@@ -122,10 +122,13 @@ export default function ImportDialog({
             preserve === project.preserveDetails
               ? project.sourcePalette
               : undefined;
+          const frequencies = new Map<string, number>();
+          for(let i=0;i<pixels.data.length;i+=4){if(pixels.data[i+3]<128)continue;const c="#"+Array.from(pixels.data.slice(i,i+3)).map(v=>v.toString(16).padStart(2,"0")).join("");frequencies.set(c,(frequencies.get(c)||0)+1);}
+          const sourceBase=[...frequencies].sort((a,b)=>b[1]-a[1])[0]?.[0] ?? project.colors[0];
           const art = await vectorizeImage({
             ...pixels,
             count,
-            base: project.colors[0],
+            base: editingExisting ? project.colors[0] : sourceBase,
             remove,
             smooth,
             preserveDetails: preserve,
@@ -164,7 +167,7 @@ export default function ImportDialog({
             art,
             baseArt: basis.art,
             colors: rematching
-              ? [project.colors[0], ...art.sourceColors.slice(1)]
+              ? art.sourceColors
               : previous?.optionsKey === optionsKey
                 ? previous.colors
                 : previous && (customized.current || editingExisting)
@@ -174,7 +177,7 @@ export default function ImportDialog({
                     )
                   : editingExisting && count === project.colorCount
                     ? project.colors.slice(0, count)
-                    : [project.colors[0], ...art.sourceColors.slice(1)],
+                    : art.sourceColors,
             mapping: rematching
               ? Array.from({ length: count }, (_, i) => i)
               : previous?.optionsKey === optionsKey
