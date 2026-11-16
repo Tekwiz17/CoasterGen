@@ -16,7 +16,7 @@ test("MakerGen home opens both tools and preserves the coaster project", async (
     page.getByRole("heading", { name: "CoasterGen", exact: true }),
   ).toBeVisible();
   await expect(
-    page.getByRole("heading", { name: "SpitGen", exact: true }),
+    page.getByRole("heading", { name: "SplitGen", exact: true }),
   ).toBeVisible();
   await page.getByRole("link", { name: /Make a coaster/ }).click();
   await expect(page.getByTestId("model-status")).toHaveText("Ready to make", {
@@ -32,7 +32,7 @@ test("MakerGen home opens both tools and preserves the coaster project", async (
     page.getByRole("heading", { name: /A little prep/ }),
   ).toBeVisible();
   await page.getByRole("link", { name: /Split a model/ }).click();
-  await expect(page.getByRole("heading", { name: /SpitGen/ })).toBeVisible();
+  await expect(page.getByRole("heading", { name: /SplitGen/ })).toBeVisible();
   await page
     .getByRole("link", { name: "All tools", exact: true })
     .first()

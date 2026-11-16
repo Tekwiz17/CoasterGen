@@ -57,8 +57,8 @@ export default function MakerGen() {
   useEffect(() => {
     document.title = route.includes("coastergen")
       ? "CoasterGen · MakerGen"
-      : route.includes("spitgen")
-        ? "SpitGen · MakerGen"
+      : route.includes("splitgen") || route.includes("spitgen")
+        ? "SplitGen · MakerGen"
         : "MakerGen — Small tools. More making.";
   }, [route]);
   return (
@@ -67,7 +67,7 @@ export default function MakerGen() {
     >
       {route === "#/coastergen" ? (
         <CoasterGen />
-      ) : route === "#/spitgen" ? (
+      ) : route === "#/splitgen" || route === "#/spitgen" ? (
         <SpitGen />
       ) : (
         <>
@@ -116,7 +116,7 @@ export default function MakerGen() {
                   </span>
                 </div>
               </a>
-              <a className="maker-tool" href="#/spitgen">
+              <a className="maker-tool" href="#/splitgen">
                 <div className="tool-art split-art" aria-hidden="true">
                   <div className="home-parts">
                     <i />
@@ -129,7 +129,7 @@ export default function MakerGen() {
                   <span className="tool-icon">
                     <Scissors size={21} />
                   </span>
-                  <h2>SpitGen</h2>
+                  <h2>SplitGen</h2>
                   <p>
                     One model, easier assembly. Separate a 3MF by color and
                     group, then add pins and sockets for the fit you need.

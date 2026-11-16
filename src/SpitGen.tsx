@@ -16,7 +16,7 @@ import type { Fit, Grouping, SplitResult } from "./lib/spitgen";
 import { DEFAULT_PROJECT, type ModelData } from "./types";
 import { download } from "./lib/image";
 const ModelViewer = lazy(() => import("./components/ModelViewer"));
-export default function SpitGen() {
+export default function SplitGen() {
   const [source, setSource] = useState<{
       bytes?: ArrayBuffer;
       demo?: boolean;
@@ -112,7 +112,7 @@ export default function SpitGen() {
       try {
         download(
           splitBundle(result, source.name, fit, clearance, diameter),
-          safeName(source.name) + "-SpitGen.zip",
+          safeName(source.name) + "-SplitGen.zip",
           "application/zip",
         );
       } catch (e) {
@@ -124,7 +124,7 @@ export default function SpitGen() {
   }
   return (
     <>
-      <MakerHeader tool="SpitGen" />
+      <MakerHeader tool="SplitGen" />
       <main className="spit-page">
         <a className="maker-back" href="#/">
           <ArrowLeft size={14} />
@@ -136,7 +136,7 @@ export default function SpitGen() {
               SPLIT. PRINT. PUT IT TOGETHER.
             </span>
             <h1>
-              SpitGen<span>One model. Your pieces.</span>
+              SplitGen<span>One model. Your pieces.</span>
             </h1>
             <p>
               Separate a 3MF by color and group. Choose how the parts go back

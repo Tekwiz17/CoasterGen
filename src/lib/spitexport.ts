@@ -75,7 +75,7 @@ export function splitBundle(
   files["print-layout.3mf"] = part3mf(result.parts, name, true);
   files["assembly-reference.3mf"] = part3mf(result.parts, name);
   files["assembly-guide.txt"] = strToU8(
-    `MakerGen / SpitGen\n${name}\n\n${fit}: ${FITS[fit].description}\n${FITS[fit].tip}\nRadial clearance: ${clearance} mm; pin diameter: ${diameter} mm\n${result.connectors} connector pairs added.\n\nparts/: one 3MF and STL for each part, on the bed.\nprint-layout.3mf: separated parts arranged in a row. Arrange onto plates in your slicer.\nassembly-reference.3mf: original assembled coordinates, for reference.\n\nTest-fit a pair before printing the full model. Fits depend on material and printer calibration.\n\n${result.warnings.join("\n")}\n\nMade with MakerGen: https://coastergen.vercel.app/#/spitgen\n`,
+    `MakerGen / SplitGen\n${name}\n\n${fit}: ${FITS[fit].description}\n${FITS[fit].tip}\nRadial clearance: ${clearance} mm; pin diameter: ${diameter} mm\n${result.connectors} connector pairs added.\n\nparts/: one 3MF and STL for each part, on the bed.\nprint-layout.3mf: separated parts arranged in a row. Arrange onto plates in your slicer.\nassembly-reference.3mf: original assembled coordinates, for reference.\n\nTest-fit a pair before printing the full model. Fits depend on material and printer calibration.\n\n${result.warnings.join("\n")}\n\nMade with MakerGen: https://coastergen.vercel.app/#/splitgen\n`,
   );
   return zipSync(files, { level: 6 });
 }
