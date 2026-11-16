@@ -1,4 +1,4 @@
-import { atlasUV } from "./hoodiemap";
+import { panels, atlasUV } from "./hoodiemap";
 import { unzipSync, zipSync, strFromU8, strToU8 } from "fflate";
 import { quantize, findEdgeBlends, resolveEdgeBlends } from "./palette";
 import { removeEdgeBackground } from "./background";
@@ -99,13 +99,19 @@ export function colorHoodie(h: Hoodie, d: Design) {
     transparent.set(mask, offset);
     offset += mask.length;
   }
+  let baseColor = d.colors[0];
+  if (d.mode === "map" && d.auto && valid.length) {
+    const counts = new Map<string, number>();
+    for (let i=0; i<pixels.length/4; i++) { if(transparent[i]) continue; const r=valid[0];const x=(i%r.width)/r.width*2048,y=Math.floor(i/r.width)/r.height*1024;if(!panels.some(p=>x>=p.x+p.w*.27&&x<=p.x+p.w*.73&&y>=p.y+p.h*.12&&y<=p.y+p.h*.95))continue; const k = "#" + Array.from(pixels.slice(i*4,i*4+3)).map(v=>v.toString(16).padStart(2,"0")).join(""); counts.set(k,(counts.get(k)||0)+1); }
+    baseColor = [...counts].sort((a,b)=>b[1]-a[1])[0]?.[0] ?? baseColor;
+  }
   const q = valid.length
     ? quantize(
         pixels,
         pixels.length / 4,
         1,
         d.colors.length,
-        d.colors[0],
+        baseColor,
         transparent,
         true,
         false,
@@ -160,7 +166,7 @@ export function colorHoodie(h: Hoodie, d: Design) {
         u[0] * v[1] - u[1] * v[0],
       ];
     let slot = 0;
-    if (d.mode === "map" && n[0] * p[0] + n[1] * p[1] > 0) {
+    if (d.mode === "map") {
       const uv = atlasUV(p[0], p[1], p[2], h.height, 125);
       slot = sample(d.map, uv[0], uv[1], 0);
     } else if (d.mode === "image") {

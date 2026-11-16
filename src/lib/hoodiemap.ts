@@ -47,7 +47,7 @@ export function atlasUV(
   const p = panels[index],
     [left, right] = span(p.kind, v);
   return [
-    (p.x + p.w * (left + u * (right - left))) / MAP_WIDTH,
+    (p.x + p.w * Math.max(left + 0.002, Math.min(right - 0.002, 0.2 + u * 0.6))) / MAP_WIDTH,
     (p.y + p.h * v) / MAP_HEIGHT,
   ];
 }

@@ -1,4 +1,6 @@
-import { mapTemplate } from "./lib/hoodiemap";
+import ImportDialog from "./components/ImportDialog";
+import type { Project, Artwork } from "./types";
+import { panels, mapTemplate } from "./lib/hoodiemap";
 import { useEffect, useRef, useState } from "react";
 import { Download, Shirt, Upload, RotateCcw } from "lucide-react";
 import { MakerHeader } from "./MakerGen";
@@ -18,6 +20,11 @@ const initial: Design = {
   smooth: true,
 };
 export default function HoodieGen() {
+  const [editing, setEditing] = useState<{source:string;name:string;key:"front"|"back"|"map"} | null>(null);
+  const [colorLimit, setColorLimit] = useState(4);
+  const [idea, setIdea] = useState("");
+  const [promptCopied, setPromptCopied] = useState(false);
+  const aiPrompt = `Edit the uploaded HoodieGen PNG template into this design: ${idea || "[describe your hoodie]"}. Use at most ${colorLimit} flat solid colors, including the garment base. Keep the exact 2048 × 1024 canvas and every piece position, outline, and size. Fill every garment piece completely, including sleeves and hood. Keep the space outside pieces transparent. No shadows, gradients, texture, labels, guides, mockup, or 3D perspective. Keep logos and text centered away from seams. Return only the finished flat template PNG.`;
   const [d, setD] = useState<Design>(initial),
     [ready, setReady] = useState(false),
     [busy, setBusy] = useState(""),
@@ -137,8 +144,16 @@ export default function HoodieGen() {
         throw Error(
           "Keep the map canvas at 2:1, like the downloaded template.",
         );
-      setSources((s) => ({ ...s, [key]: source }));
-      setD((v) => ({ ...v, [key]: r, auto: true }));
+      if(key==="map") {
+        const counts=new Map<string,number>();
+        for(let i=0;i<r.width*r.height;i++){const x=(i%r.width)/r.width*2048,y=Math.floor(i/r.width)/r.height*1024;
+          if(r.data[i*4+3]<128 || !panels.some(p=>x>p.x+p.w*.27&&x<p.x+p.w*.73&&y>p.y+p.h*.12&&y<p.y+p.h*.95))continue;
+          const c="#"+Array.from(r.data.slice(i*4,i*4+3)).map(v=>v.toString(16).padStart(2,"0")).join("");counts.set(c,(counts.get(c)||0)+1);
+        }
+        const dominant=[...counts].sort((a,b)=>b[1]-a[1])[0]?.[0];
+        if(dominant)setD(v=>({...v,colors:[dominant,...v.colors.slice(1)]}));
+      }
+      setEditing({source, name:file.name, key});
     } catch (e) {
       setError((e as Error).message);
     } finally {
@@ -172,6 +187,22 @@ export default function HoodieGen() {
   return (
     <>
       <MakerHeader tool="HoodieGen" />
+      {editing && <ImportDialog source={editing.source} name={editing.name}
+        project={{...DEFAULT_PROJECT, source:editing.source, colors:d.colors, colorCount:d.colors.length, removeBackground:true, detail:1024, smoothEdges:true, preserveDetails:false}}
+        onClose={()=>setEditing(null)}
+        onApply={(p:Project, art:Artwork)=>{
+          if(editing.key==="map" && Math.abs(art.width/art.height-2)>0.02){setError("Surface maps must keep the 2:1 canvas. Reset the crop before applying.");return;}
+          const canvas=document.createElement("canvas");canvas.width=art.width;canvas.height=art.height;
+          const ctx=canvas.getContext("2d")!;
+          const draw=(loops:number[][][],color:string)=>{ctx.beginPath();for(const loop of loops){loop.forEach(([x,y],i)=>i?ctx.lineTo(x,y):ctx.moveTo(x,y));ctx.closePath();}ctx.fillStyle=color;ctx.fill("evenodd");};
+          art.loops.forEach((loops,i)=>draw(loops,p.colors[p.mapping[i]??i]));
+          art.paintLoops?.forEach((loops,i)=>draw(loops,p.colors[i]));
+          const source=canvas.toDataURL("image/png");
+          setSources(v=>({...v,[editing.key]:source}));
+          setD(v=>({...v,[editing.key]:{width:canvas.width,height:canvas.height,data:ctx.getImageData(0,0,canvas.width,canvas.height).data},colors:p.colors,auto:editing.key==="map",remove:false,smooth:p.smoothEdges}));
+          setEditing(null);
+        }} />}
+
       <main className="hoodie-main">
         <div className="hoodie-heading">
           <span className="maker-eyebrow">YOUR NEXT DESK COMPANION</span>
@@ -188,7 +219,7 @@ export default function HoodieGen() {
                 <Shirt size={18} /> Your hoodie
               </span>
               <button
-                className="secondary"
+                className="button secondary"
                 onClick={() => setReset((v) => v + 1)}
               >
                 <RotateCcw size={15} /> Reset view
@@ -238,7 +269,7 @@ export default function HoodieGen() {
                     href={BASE_URL}
                     target="_blank"
                     rel="noreferrer"
-                    className="secondary"
+                    className="button secondary"
                   >
                     Get the base model ↗
                   </a>
@@ -315,7 +346,7 @@ export default function HoodieGen() {
                     hood panels. Keep the canvas size and piece positions.
                   </p>
                   <button
-                    className="secondary"
+                    className="button secondary"
                     onClick={() =>
                       download(
                         mapTemplate(),
@@ -346,6 +377,23 @@ export default function HoodieGen() {
                   >
                     Download blank map without guides
                   </button>
+                  <button className="button secondary" onClick={async () => {
+                    try {
+                      const img = new Image(); img.src = "data:image/svg+xml;charset=utf-8," + encodeURIComponent(mapTemplate(false));
+                      await img.decode(); const canvas = document.createElement("canvas"); canvas.width = 2048; canvas.height = 1024;
+                      canvas.getContext("2d")!.drawImage(img, 0, 0);
+                      canvas.toBlob(async blob => { if(blob) download(new Uint8Array(await blob.arrayBuffer()), "HoodieGen-map-blank.png", "image/png"); }, "image/png");
+                    } catch { setError("PNG download failed. Please try again."); }
+                  }}>Download PNG template</button>
+                  <details>
+                    <summary>Create with AI</summary>
+                    <label className="field">Your design<textarea value={idea} onChange={e => {setIdea(e.target.value);setPromptCopied(false);}} placeholder="Buffalo Bills Christmas sweater…" /></label>
+                    <label className="field">Maximum colors<input type="number" min="2" max="8" value={colorLimit} onChange={e => {setColorLimit(Math.max(2,Math.min(8,+e.target.value || 4)));setPromptCopied(false);}} /></label>
+                    <p>Download the PNG above, attach it to an image generator, then paste this prompt.</p>
+                    <textarea aria-label="AI image prompt" readOnly value={aiPrompt} rows={8}/>
+                    <button className="button secondary" onClick={() => navigator.clipboard.writeText(aiPrompt).then(()=>setPromptCopied(true)).catch(()=>setError("Select and copy the prompt above."))}>{promptCopied ? "Copied" : "Copy AI prompt"}</button>
+                    <p>Try <a href="https://chatgpt.com/" target="_blank" rel="noreferrer">ChatGPT</a> or <a href="https://gemini.google.com/" target="_blank" rel="noreferrer">Gemini</a>. Free accounts have usage limits.</p>
+                  </details>
                   <details>
                     <summary>How the map works</summary>
                     <p>
@@ -443,7 +491,7 @@ export default function HoodieGen() {
                       ))}
                       <div className="hoodie-tabs">
                         <button
-                          className="secondary"
+                          className="button secondary"
                           onClick={() =>
                             patch({ [place]: { ...d[place], x: 0, z: 52 } })
                           }
@@ -451,7 +499,7 @@ export default function HoodieGen() {
                           Center image
                         </button>
                         <button
-                          className="secondary"
+                          className="button secondary"
                           onClick={() => {
                             patch({ [side]: undefined });
                             setSources((v) => ({ ...v, [side]: "" }));
@@ -529,7 +577,7 @@ export default function HoodieGen() {
                 <b>3</b> Ready to print
               </h2>
               <button
-                className="primary"
+                className="button primary"
                 disabled={!model || !!busy || !!error}
                 onClick={() => void save()}
               >
@@ -537,14 +585,14 @@ export default function HoodieGen() {
               </button>
               <div className="hoodie-export">
                 <button
-                  className="secondary"
+                  className="button secondary"
                   disabled={!model || !!busy || !!error}
                   onClick={() => setExportPanel("studio")}
                 >
                   <BambuLogo /> Open in Bambu Studio
                 </button>
                 <button
-                  className="secondary"
+                  className="button secondary"
                   disabled={!model || !!busy || !!error}
                   onClick={() => setExportPanel("maker")}
                 >
@@ -561,7 +609,7 @@ export default function HoodieGen() {
         </div>
         {exportPanel && (
           <section className="hoodie-handoff" ref={handoff}>
-            <button className="secondary" onClick={() => setExportPanel(null)}>
+            <button className="button secondary" onClick={() => setExportPanel(null)}>
               Close
             </button>
             <h2>
@@ -580,7 +628,7 @@ export default function HoodieGen() {
               value={CREDIT}
             />
             <button
-              className="secondary"
+              className="button secondary"
               onClick={() => {
                 navigator.clipboard
                   .writeText(CREDIT)
@@ -593,7 +641,7 @@ export default function HoodieGen() {
               {copied ? "Credit copied" : "Copy credit"}
             </button>
             <button
-              className="primary"
+              className="button primary"
               disabled={!!busy}
               onClick={() => void save(exportPanel === "studio")}
             >
@@ -606,7 +654,7 @@ export default function HoodieGen() {
                 href="https://makerworld.com/en/my/models/publish?type=original"
                 target="_blank"
                 rel="noreferrer"
-                className="secondary"
+                className="button secondary"
               >
                 Open MakerWorld ↗
               </a>

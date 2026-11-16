@@ -35,6 +35,7 @@ if (process.env.HOODIE_FIXTURE)
       mimeType: "image/svg+xml",
       buffer: svg,
     });
+    await page.getByRole("button", {name:"Use this image"}).click({timeout:90000});
     await expect(page.getByAltText("front artwork")).toBeVisible();
     await expect(
       page.getByRole("button", { name: "Download 3MF", exact: true }),
@@ -45,6 +46,7 @@ if (process.env.HOODIE_FIXTURE)
       mimeType: "image/svg+xml",
       buffer: svg,
     });
+    await page.getByRole("button", {name:"Use this image"}).click({timeout:90000});
     await expect(
       page.getByRole("button", { name: "Download 3MF", exact: true }),
     ).toBeEnabled({ timeout: 60000 });
@@ -54,6 +56,7 @@ if (process.env.HOODIE_FIXTURE)
       mimeType: "image/svg+xml",
       buffer: svg,
     });
+    await page.getByRole("button", {name:"Use this image"}).click({timeout:90000});
     await expect(
       page.getByRole("button", { name: "Download 3MF", exact: true }),
     ).toBeEnabled({ timeout: 60000 });
