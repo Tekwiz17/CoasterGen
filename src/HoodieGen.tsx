@@ -187,7 +187,7 @@ export default function HoodieGen() {
   return (
     <>
       <MakerHeader tool="HoodieGen" />
-      {editing && <ImportDialog source={editing.source} name={editing.name}
+      {editing && <ImportDialog context="hoodie" source={editing.source} name={editing.name}
         project={{...DEFAULT_PROJECT, source:editing.source, colors:d.colors, colorCount:d.colors.length, removeBackground:true, detail:1024, smoothEdges:true, preserveDetails:false}}
         onClose={()=>setEditing(null)}
         onApply={(p:Project, art:Artwork)=>{
@@ -239,7 +239,7 @@ export default function HoodieGen() {
                     detail
                   />
                 ) : (
-                  <ModelViewer
+                  <ModelViewer smoothSurface
                     model={model}
                     project={{
                       ...DEFAULT_PROJECT,
@@ -387,7 +387,7 @@ export default function HoodieGen() {
                   }}>Download PNG template</button>
                   <details>
                     <summary>Create with AI</summary>
-                    <label className="field">Your design<textarea value={idea} onChange={e => {setIdea(e.target.value);setPromptCopied(false);}} placeholder="Buffalo Bills Christmas sweater…" /></label>
+                    <label className="field">Your design<textarea value={idea} onChange={e => {setIdea(e.target.value);setPromptCopied(false);}} placeholder="Describe the design you want…" /></label>
                     <label className="field">Maximum colors<input type="number" min="2" max="8" value={colorLimit} onChange={e => {setColorLimit(Math.max(2,Math.min(8,+e.target.value || 4)));setPromptCopied(false);}} /></label>
                     <p>Download the PNG above, attach it to an image generator, then paste this prompt.</p>
                     <textarea aria-label="AI image prompt" readOnly value={aiPrompt} rows={8}/>

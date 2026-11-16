@@ -152,7 +152,7 @@ export function colorHoodie(h: Hoodie, d: Design) {
     return transparent[start + i] ? 0 : q!.labels[start + i];
   };
   const slots = new Uint8Array(h.faces.length);
-  const groups = colors.map(() => [] as number[]);
+
   h.faces.forEach((f, i) => {
     const a = h.points[f[0]],
       b = h.points[f[1]],
@@ -185,8 +185,29 @@ export function colorHoodie(h: Hoodie, d: Design) {
       }
     }
     slots[i] = slot;
-    groups[slot].push(...f);
+
   });
+  if (d.smooth && valid.length) {
+    // Remove isolated facet speckles using shared mesh vertices. Strong boundaries survive.
+    const counts = new Uint32Array(h.points.length);
+    for (const f of h.faces) for (const v of f) counts[v]++;
+    const offsets = new Uint32Array(counts.length + 1);
+    for (let i=0;i<counts.length;i++) offsets[i+1]=offsets[i]+counts[i];
+    const cursor=offsets.slice(), incidence=new Uint32Array(offsets[offsets.length-1]);
+    h.faces.forEach((f,i)=>{for(const v of f) incidence[cursor[v]++]=i;});
+    const original=slots.slice(), votes=new Uint32Array(colors.length);
+    h.faces.forEach((f,i)=>{
+      votes.fill(0);let total=0;
+      for(const v of f) for(let k=offsets[v];k<offsets[v+1];k++) {
+        const other=incidence[k];if(other===i)continue;
+        votes[original[other]]++;total++;
+      }
+      let best=original[i];for(let k=0;k<votes.length;k++)if(votes[k]>votes[best])best=k;
+      if(total>=6 && votes[original[i]]<=2 && votes[best]>=total*0.8)slots[i]=best;
+    });
+  }
+  const groups = colors.map(() => [] as number[]);
+  h.faces.forEach((f,i)=>groups[slots[i]].push(...f));
   const positions = new Float32Array(h.points.flat());
   const model: ModelData = {
     parts: groups.flatMap((g, i) =>

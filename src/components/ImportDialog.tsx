@@ -1,3 +1,4 @@
+import ArtworkPreview from "./ArtworkPreview";
 import { useEffect, useRef, useState } from "react";
 import {
   ArrowRight,
@@ -28,6 +29,7 @@ export default function ImportDialog({
   name,
   project,
   preservePlacement = false,
+  context = "coaster",
   onClose,
   onApply,
 }: {
@@ -35,6 +37,7 @@ export default function ImportDialog({
   name: string;
   project: Project;
   preservePlacement?: boolean;
+  context?: "coaster" | "hoodie";
   onClose: () => void;
   onApply: (project: Project, artwork: Artwork) => void;
 }) {
@@ -399,7 +402,7 @@ export default function ImportDialog({
                     key={i}
                     aria-label={`Paint with filament ${i + 1}${i === 0 ? " (base)" : ""}`}
                     title={
-                      i === 0 ? "Coaster base" : `Filament ${i + 1} · ${color}`
+                      i === 0 ? "Base color" : `Filament ${i + 1} · ${color}`
                     }
                     aria-pressed={selectedSlot === i}
                     style={{ "--swatch": color } as React.CSSProperties}
@@ -433,9 +436,9 @@ export default function ImportDialog({
             {tool === "fill"
               ? "Choose a filament above, then click one connected area in the image. Other areas of that color stay unchanged."
               : tool === "paint"
-                ? `Paint with ${selectedSlot === 0 ? "the coaster base" : `filament ${selectedSlot + 1}`}. Your strokes keep that filament when you remap image colors.`
+                ? `Paint with ${selectedSlot === 0 ? "the base color" : `filament ${selectedSlot + 1}`}. Your strokes keep that filament when you remap image colors.`
                 : tool === "erase"
-                  ? "Erase unwanted pixels to reveal the coaster base."
+                  ? "Erase unwanted pixels to reveal the base color."
                   : "Brush over corrections to bring back the automatic color mapping."}{" "}
             Zoom in for small details; use Move to pan. Arrow keys move the
             brush; Space paints.
@@ -476,7 +479,7 @@ export default function ImportDialog({
         </figure>
         <figure>
           <div className="import-after">
-            {shown ? (
+            {shown && context === "hoodie" ? <ArtworkPreview artwork={shown.art} colors={shown.colors} mapping={shown.mapping} /> : shown ? (
               <FlatPreview
                 project={{ ...next, showGuides: false }}
                 artwork={shown.art}
@@ -501,7 +504,7 @@ export default function ImportDialog({
               ? "Live preview"
               : !current
                 ? "Updating colors…"
-                : `Coaster preview · ${count} colors`}
+                : `${context === "hoodie" ? "Artwork preview" : "Coaster preview"} · ${count} colors`}
           </figcaption>
         </figure>
       </div>

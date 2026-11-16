@@ -10,6 +10,7 @@ interface Props {
   reset: number;
   onFailure: () => void;
   trueColors?: boolean;
+  smoothSurface?: boolean;
   detail?: boolean;
   azimuth?: number;
   label?: string;
@@ -22,6 +23,7 @@ export default function ModelViewer({
   reset,
   onFailure,
   trueColors = false,
+  smoothSurface = false,
   detail = false,
   azimuth = 0,
   label = "Interactive 3D coaster preview. Drag to orbit; scroll to zoom.",
@@ -144,6 +146,16 @@ export default function ModelViewer({
         }
       });
     }
+    let sharedNormals: THREE.BufferAttribute | undefined;
+    if (smoothSurface && model?.parts.length) {
+      const basis = new THREE.BufferGeometry();
+      basis.setAttribute("position", new THREE.BufferAttribute(model.parts[0].positions, 3));
+      const indices = new Uint32Array(model.parts.reduce((n,p)=>n+p.indices.length,0));
+      let offset=0;for(const p of model.parts){indices.set(p.indices,offset);offset+=p.indices.length;}
+      basis.setIndex(new THREE.BufferAttribute(indices,1));
+      basis.computeVertexNormals();sharedNormals=basis.getAttribute("normal") as THREE.BufferAttribute;
+      basis.dispose();
+    }
     for (const part of model?.parts ?? []) {
       const indexed = new THREE.BufferGeometry();
       indexed.setAttribute(
@@ -151,9 +163,10 @@ export default function ModelViewer({
         new THREE.BufferAttribute(part.positions, 3),
       );
       indexed.setIndex(new THREE.BufferAttribute(part.indices, 1));
+      if(sharedNormals) indexed.setAttribute("normal",sharedNormals);
       const geo = indexed.toNonIndexed();
       indexed.dispose();
-      geo.computeVertexNormals();
+      if(!sharedNormals) geo.computeVertexNormals();
       const mat =
         trueColors && !detail
           ? new THREE.MeshBasicMaterial({
@@ -184,7 +197,7 @@ export default function ModelViewer({
       s.group.add(mesh);
     }
     s.render();
-  }, [model, trueColors, detail]);
+  }, [model, trueColors, detail, smoothSurface]);
   useEffect(() => {
     const s = state.current;
     if (!s) return;
