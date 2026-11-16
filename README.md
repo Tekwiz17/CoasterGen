@@ -100,3 +100,9 @@ SplitGen recommends a fit using actual separated solids, available connector loc
 Use **See connections** to turn real mating faces upward and separate them for inspection. Snap slits, pin heads and matching socket openings come from the exported mesh. **Surface detail** adds shading/edge definition; switch it off for unlit colors. Spacing is relative to the model size, and Assembly/Reset restores the assembled preview. None of these preview controls changes exported geometry.
 
 SplitGen’s **Download 3MF** saves every generated piece as a separate named body in one colored project, arranged for printing. **Open in Bambu Studio** downloads the same project and launches Studio; select the downloaded file through File → Open Project. ZIP and individual downloads remain available. Preview isolation and connection orientation do not limit or rotate the exported parts.
+
+### HoodieGen
+
+Open `/#/hoodiegen`. Load your own copy of Morganja's original [Hoodie Pen Pot](https://makerworld.com/en/models/2074420-hoodie-pen-pot#profileId-2240823) 3MF. The base model is not redistributed with this app. Its Standard Digital File License still applies.
+
+Image mode projects independent front/back artwork with adjustable width and position. Surface map mode downloads an editable 2048 × 1024 SVG layout with front, sleeve, back, sleeve panels; remove guides before importing. This is a cylindrical surface projection, so folds stretch artwork. Both modes share CoasterGen's palette matcher and support 2–8 filament colors. Preview uses the same triangle assignments as export. The exporter preserves original geometry and attribution, writes Bambu facet paint and filament slots, and includes HoodieGen and Morganja credits. Inspect the result and reslice in Studio; no G-code is generated. MakerWorld handoff provides copyable required credits and a link to upload, subject to the base license.

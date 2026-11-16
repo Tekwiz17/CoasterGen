@@ -1,6 +1,7 @@
 import { GitHubLogo } from "./components/BrandIcons";
 import { lazy, Suspense, useEffect, useState } from "react";
 import { ArrowUpRight, ArrowRight, Layers3, Scissors } from "lucide-react";
+const HoodieGen = lazy(() => import("./HoodieGen"));
 const CoasterGen = lazy(() => import("./App"));
 const SpitGen = lazy(() => import("./SpitGen"));
 export function MakerMark() {
@@ -55,17 +56,21 @@ export default function MakerGen() {
     return () => removeEventListener("hashchange", update);
   }, []);
   useEffect(() => {
-    document.title = route.includes("coastergen")
-      ? "CoasterGen · MakerGen"
-      : route.includes("splitgen") || route.includes("spitgen")
-        ? "SplitGen · MakerGen"
-        : "MakerGen — Small tools. More making.";
+    document.title = route.includes("hoodiegen")
+      ? "HoodieGen · MakerGen"
+      : route.includes("coastergen")
+        ? "CoasterGen · MakerGen"
+        : route.includes("splitgen") || route.includes("spitgen")
+          ? "SplitGen · MakerGen"
+          : "MakerGen — Small tools. More making.";
   }, [route]);
   return (
     <Suspense
       fallback={<div className="maker-loading">Opening your workshop…</div>}
     >
-      {route === "#/coastergen" ? (
+      {route === "#/hoodiegen" ? (
+        <HoodieGen />
+      ) : route === "#/coastergen" ? (
         <CoasterGen />
       ) : route === "#/splitgen" || route === "#/spitgen" ? (
         <SpitGen />
@@ -93,6 +98,26 @@ export default function MakerGen() {
               </div>
             </section>
             <section aria-label="MakerGen tools" className="maker-tools">
+              <a className="maker-tool" href="#/hoodiegen">
+                <div className="tool-art hoodie-home-art" aria-hidden="true">
+                  <span>
+                    YOUR
+                    <br />
+                    STYLE.
+                  </span>
+                  <span className="tool-tag">ARTWORK → HOODIE PEN POT</span>
+                </div>
+                <div className="tool-copy">
+                  <h2>HoodieGen</h2>
+                  <p>
+                    Dress up your desk. Add front and back artwork, or wrap a
+                    surface map around a Hoodie Pen Pot.
+                  </p>
+                  <span className="tool-open">
+                    Design a hoodie <ArrowRight size={18} />
+                  </span>
+                </div>
+              </a>
               <a className="maker-tool" href="#/coastergen">
                 <div className="tool-art coaster-art" aria-hidden="true">
                   <div className="home-coaster">

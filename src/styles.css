@@ -3235,3 +3235,271 @@ fieldset.import-settings {
 .split-bambu-button {
   margin-top: 10px;
 }
+
+.hoodie-main {
+  max-width: 1450px;
+  margin: auto;
+  padding: 42px 32px;
+}
+.hoodie-heading h1 {
+  font-size: clamp(32px, 4vw, 52px);
+  letter-spacing: -2px;
+  margin: 12px 0;
+}
+.hoodie-heading p,
+.hoodie-caption {
+  color: var(--muted, #607167);
+}
+.hoodie-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 370px;
+  gap: 28px;
+  margin-top: 32px;
+  align-items: start;
+}
+.hoodie-preview {
+  position: sticky;
+  top: 20px;
+  background: #edf0e7;
+  border: 1px solid #d9e1d5;
+  border-radius: 24px;
+  padding: 20px;
+}
+.hoodie-preview-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+.hoodie-preview-top span {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.hoodie-view {
+  height: 580px;
+  position: relative;
+}
+.hoodie-empty {
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-direction: column;
+  text-align: center;
+  max-width: 350px;
+  margin: auto;
+  gap: 12px;
+  color: #476459;
+}
+.hoodie-empty p {
+  line-height: 1.6;
+}
+.hoodie-empty h2 {
+  margin: 0;
+}
+.hoodie-caption {
+  text-align: center;
+  font-size: 12px;
+}
+.hoodie-controls {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+.hoodie-controls section {
+  background: #fff;
+  border: 1px solid #dce3d8;
+  border-radius: 20px;
+  padding: 22px;
+}
+.hoodie-controls h2 {
+  font-size: 17px;
+  margin: 0 0 18px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.hoodie-controls h2 b {
+  border-radius: 50%;
+  background: #e0efdf;
+  color: #08785b;
+  width: 26px;
+  height: 26px;
+  text-align: center;
+  line-height: 26px;
+  font-size: 13px;
+}
+.hoodie-controls small {
+  display: block;
+  color: #68766b;
+  font-size: 12px;
+  line-height: 1.6;
+  margin-top: 8px;
+}
+.hoodie-controls p,
+.hoodie-controls details {
+  font-size: 13px;
+  line-height: 1.6;
+}
+.hoodie-upload {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  position: relative;
+  overflow: hidden;
+  border: 1px dashed #91b29d;
+  background: #f4f8f1;
+  padding: 18px 8px;
+  border-radius: 12px;
+  cursor: pointer;
+  margin: 14px 0;
+}
+.hoodie-upload input {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  cursor: pointer;
+  width: 100%;
+  height: 100%;
+}
+.hoodie-upload:focus-within {
+  outline: 3px solid #08785b;
+}
+.hoodie-modes,
+.hoodie-tabs {
+  display: flex;
+  gap: 8px;
+  margin: 12px 0;
+}
+.hoodie-modes button,
+.hoodie-tabs button {
+  flex: 1;
+  border: 1px solid #d9e1d5;
+  background: #f9faf7;
+  border-radius: 10px;
+  padding: 12px;
+  color: #425b4b;
+  cursor: pointer;
+}
+.hoodie-modes button.active,
+.hoodie-tabs button.active {
+  border-color: #08785b;
+  background: #e5f3e6;
+  color: #086044;
+}
+.hoodie-modes small {
+  font-size: 11px;
+  margin-top: 5px;
+}
+.hoodie-art {
+  width: 100%;
+  height: 110px;
+  object-fit: contain;
+  background: repeating-conic-gradient(#eee 0% 25%, #fff 0% 50%) 50%/16px 16px;
+  border-radius: 10px;
+}
+.hoodie-range {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 13px;
+  margin: 18px 0;
+}
+.hoodie-range input {
+  width: 100%;
+  accent-color: #08785b;
+}
+.hoodie-check {
+  display: flex;
+  gap: 8px;
+  font-size: 13px;
+  margin: 16px 0;
+}
+.hoodie-swatches {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.hoodie-swatches label {
+  text-align: center;
+}
+.hoodie-swatches input {
+  width: 36px;
+  height: 36px;
+  padding: 2px;
+  border: 1px solid #bacbbb;
+  border-radius: 8px;
+  cursor: pointer;
+}
+.hoodie-controls .primary {
+  width: 100%;
+  justify-content: center;
+}
+.hoodie-export {
+  display: grid;
+  gap: 8px;
+  margin: 10px 0;
+}
+.hoodie-export button {
+  justify-content: center;
+}
+.hoodie-export svg {
+  width: 20px;
+  height: 20px;
+}
+.hoodie-handoff {
+  padding: 26px;
+  border: 1px solid #b9cebb;
+  border-radius: 20px;
+  margin-top: 25px;
+  background: #fff;
+}
+.hoodie-handoff textarea {
+  display: block;
+  width: 100%;
+  min-height: 120px;
+  margin: 18px 0;
+  padding: 14px;
+  line-height: 1.7;
+}
+.hoodie-handoff button,
+.hoodie-handoff a {
+  margin: 6px;
+}
+.hoodie-credit {
+  font-size: 12px;
+  text-align: center;
+  padding: 30px;
+  color: #68766b;
+}
+.hoodie-home-art {
+  background: #d8ebbd;
+  color: #164c37;
+  font-size: 62px;
+  font-weight: 800;
+  line-height: 0.9;
+  letter-spacing: -4px;
+}
+.hoodie-home-art > span:first-child {
+  transform: rotate(-8deg);
+}
+@media (max-width: 850px) {
+  .hoodie-layout {
+    grid-template-columns: 1fr;
+  }
+  .hoodie-preview {
+    position: relative;
+    top: 0;
+  }
+  .hoodie-view {
+    height: 400px;
+  }
+  .hoodie-main {
+    padding: 24px 16px;
+  }
+  .hoodie-heading h1 {
+    letter-spacing: -1px;
+  }
+}

@@ -11,6 +11,8 @@ interface Props {
   onFailure: () => void;
   trueColors?: boolean;
   detail?: boolean;
+  azimuth?: number;
+  label?: string;
 }
 export default function ModelViewer({
   model,
@@ -21,6 +23,8 @@ export default function ModelViewer({
   onFailure,
   trueColors = false,
   detail = false,
+  azimuth = 0,
+  label = "Interactive 3D coaster preview. Drag to orbit; scroll to zoom.",
 }: Props) {
   const host = useRef<HTMLDivElement>(null);
   const state = useRef<{
@@ -53,10 +57,7 @@ export default function ModelViewer({
     renderer.toneMapping = THREE.ACESFilmicToneMapping;
     renderer.toneMappingExposure = 1.18;
     el.appendChild(renderer.domElement);
-    renderer.domElement.setAttribute(
-      "aria-label",
-      "Interactive 3D coaster preview. Drag to orbit; scroll to zoom.",
-    );
+    renderer.domElement.setAttribute("aria-label", label);
     renderer.domElement.setAttribute("role", "img");
     const scene = new THREE.Scene(),
       camera = new THREE.PerspectiveCamera(32, 1, 0.1, 3000);
@@ -208,10 +209,11 @@ export default function ModelViewer({
       (-d * 1.15 * factor) / zoom,
       ((bottom ? -1 : 1) * d * 1.9 * factor) / zoom,
     );
+    s.camera.position.applyAxisAngle(new THREE.Vector3(0, 0, 1), azimuth);
     s.controls.target.set(0, 0, project.thickness / 2);
     s.floor.visible = !bottom;
     s.controls.update();
     s.render();
-  }, [bottom, zoom, reset, project.diameter]);
+  }, [bottom, zoom, reset, project.diameter, azimuth]);
   return <div ref={host} className="three-view" />;
 }
