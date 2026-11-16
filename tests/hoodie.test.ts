@@ -56,3 +56,23 @@ if (fixture)
     assert.equal(strFromU8(out["HoodieGen-credits.txt"]), CREDIT);
     assert.match(strFromU8(out["Metadata/project_settings.config"]), /#ff0000/);
   });
+
+import { atlasUV, panels, mapTemplate } from "../src/lib/hoodiemap";
+test("flattened atlas samples each named garment piece within its bounds", () => {
+  const points = [
+    [0, -10, 40],
+    [0, 10, 40],
+    [50, -5, 40],
+    [-50, 5, 40],
+    [0, -10, 95],
+    [0, 10, 95],
+  ];
+  points.forEach(([x, y, z], i) => {
+    const [u, v] = atlasUV(x, y, z, 100, 125);
+    const p = panels[i];
+    assert.ok(u * 2048 >= p.x && u * 2048 <= p.x + p.w);
+    assert.ok(v * 1024 >= p.y && v * 1024 <= p.y + p.h);
+  });
+  assert.match(mapTemplate(), /RIGHT SLEEVE/);
+  assert.doesNotMatch(mapTemplate(false), /<text/);
+});

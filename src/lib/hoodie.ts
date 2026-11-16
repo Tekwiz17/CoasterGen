@@ -1,3 +1,4 @@
+import { atlasUV } from "./hoodiemap";
 import { unzipSync, zipSync, strFromU8, strToU8 } from "fflate";
 import { quantize, findEdgeBlends, resolveEdgeBlends } from "./palette";
 import { removeEdgeBackground } from "./background";
@@ -160,7 +161,7 @@ export function colorHoodie(h: Hoodie, d: Design) {
       ];
     let slot = 0;
     if (d.mode === "map" && n[0] * p[0] + n[1] * p[1] > 0) {
-      const uv = surfaceUV(p[0], p[1], p[2], h.height);
+      const uv = atlasUV(p[0], p[1], p[2], h.height, 125);
       slot = sample(d.map, uv[0], uv[1], 0);
     } else if (d.mode === "image") {
       const front = p[1] < 0;

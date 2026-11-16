@@ -1,3 +1,4 @@
+import { mapTemplate } from "./lib/hoodiemap";
 import { useEffect, useRef, useState } from "react";
 import { Download, Shirt, Upload, RotateCcw } from "lucide-react";
 import { MakerHeader } from "./MakerGen";
@@ -16,10 +17,6 @@ const initial: Design = {
   remove: true,
   smooth: true,
 };
-function template() {
-  const names = ["FRONT", "RIGHT SLEEVE", "BACK", "LEFT SLEEVE"];
-  return `<svg xmlns="http://www.w3.org/2000/svg" width="2048" height="1024" viewBox="0 0 2048 1024"><title>HoodieGen surface map. Keep canvas size and panel positions. Remove guides before uploading.</title><rect width="2048" height="1024" fill="#e4e8dc"/><g id="guides" fill="none" stroke="#476459" stroke-dasharray="8 8">${names.map((_, i) => `<rect x="${i * 512}" y="0" width="512" height="1024"/>`).join("")}</g><g id="labels" fill="#476459" font-family="sans-serif" font-size="28">${names.map((n, i) => `<text x="${i * 512 + 30}" y="55">${n}</text>`).join("")}<text x="30" y="990">TOP = hood / shoulders · BOTTOM = hem · Remove guides and labels before upload</text></g></svg>`;
-}
 export default function HoodieGen() {
   const [d, setD] = useState<Design>(initial),
     [ready, setReady] = useState(false),
@@ -60,7 +57,28 @@ export default function HoodieGen() {
         );
       pending.current.clear();
     };
+    const controller = new AbortController();
+    setBusy("Loading your hoodie…");
+    fetch("/hoodie-base.3mf", { signal: controller.signal })
+      .then((r) => {
+        if (!r.ok)
+          throw Error(
+            "Could not download the default hoodie. Try loading a base 3MF below.",
+          );
+        return r.arrayBuffer();
+      })
+      .then((bytes) => call("load", { bytes: new Uint8Array(bytes) }))
+      .then(() => {
+        if (!controller.signal.aborted) setReady(true);
+      })
+      .catch((e) => {
+        if (!controller.signal.aborted) setError(e.message);
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) setBusy("");
+      });
     return () => {
+      controller.abort();
       w.terminate();
       for (const p of pending.current.values()) p.reject(Error("Closed"));
       pending.current.clear();
@@ -211,10 +229,10 @@ export default function HoodieGen() {
               ) : (
                 <div className="hoodie-empty">
                   <Shirt size={72} />
-                  <h2>Start with the original hoodie</h2>
+                  <h2>{busy ? "Loading your hoodie…" : "Load the hoodie"}</h2>
                   <p>
-                    Download Morganja’s Hoodie Pen Pot, then load its 3MF here.
-                    Your model stays on your device.
+                    The original hoodie loads automatically. You can also choose
+                    its 3MF below. Your artwork stays on your device.
                   </p>
                   <a
                     href={BASE_URL}
@@ -241,8 +259,11 @@ export default function HoodieGen() {
           <aside className="hoodie-controls">
             <section>
               <h2>
-                <b>1</b> Load the hoodie
+                <b>1</b> Your hoodie
               </h2>
+              {ready && (
+                <p role="status">Original hoodie loaded · Ready to design</p>
+              )}
               <label className="hoodie-upload">
                 <Upload size={18} />
                 {ready ? "Replace base 3MF" : "Choose base 3MF"}
@@ -290,13 +311,14 @@ export default function HoodieGen() {
                 <>
                   <p>
                     Paint across front, back, sleeves, and hood using a
-                    wraparound map. Keep the canvas size and panel positions.
+                    flattened sweatshirt map with detached sleeves and separate
+                    hood panels. Keep the canvas size and piece positions.
                   </p>
                   <button
                     className="secondary"
                     onClick={() =>
                       download(
-                        template(),
+                        mapTemplate(),
                         "HoodieGen-map-template.svg",
                         "image/svg+xml",
                       )
@@ -304,16 +326,36 @@ export default function HoodieGen() {
                   >
                     <Download size={16} /> Download map template
                   </button>
+                  <img
+                    className="hoodie-art"
+                    src={
+                      "data:image/svg+xml;charset=utf-8," +
+                      encodeURIComponent(mapTemplate())
+                    }
+                    alt="Flattened hoodie map: front, back, detached sleeves and hood panels"
+                  />
+                  <button
+                    className="text-button"
+                    onClick={() =>
+                      download(
+                        mapTemplate(false),
+                        "HoodieGen-map-blank.svg",
+                        "image/svg+xml",
+                      )
+                    }
+                  >
+                    Download blank map without guides
+                  </button>
                   <details>
                     <summary>How the map works</summary>
                     <p>
                       Open the SVG in your editor, or give it to your image AI
                       as a layout reference. Keep the 2048 × 1024 canvas. Remove
-                      labels and dashed guides before uploading. Front and back
-                      occupy alternate panels; sleeve panels connect them. Top
-                      reaches the hood; bottom reaches the hem. It is a
-                      cylindrical wrap, so folds and panel boundaries can
-                      stretch artwork. Check every side in the preview.
+                      labels and dashed guides before uploading. The large
+                      pieces are the front and back. Tapered pieces are sleeves;
+                      the two small rounded pieces cover the hood. Top points
+                      toward the shoulders; bottom points toward the hem or
+                      cuffs. Check the folds and seams in the 3D preview.
                     </p>
                   </details>
                   <label className="hoodie-upload">
