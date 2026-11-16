@@ -520,6 +520,8 @@ export default function HoodieGen() {
                   </label>
                 </>
               )}
+              <label className="hoodie-check"><input type="checkbox" checked={!!d.betaEdges} onChange={e=>patch({betaEdges:e.target.checked})}/> Smooth color edges (beta)</label>
+              <small>Refines the mesh along color boundaries in both preview and 3MF. Takes longer and creates larger files.</small>
               <label className="hoodie-range">
                 Filament colors{" "}
                 <select

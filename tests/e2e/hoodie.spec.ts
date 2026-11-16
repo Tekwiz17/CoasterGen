@@ -19,7 +19,7 @@ test("HoodieGen home and two design paths", async ({ page }) => {
 });
 if (process.env.HOODIE_FIXTURE)
   test("real hoodie image, map and painted export", async ({ page }) => {
-    test.setTimeout(150000);
+    test.setTimeout(240000);
     const errors: string[] = [];
     page.on("pageerror", (e) => errors.push(e.message));
     await page.goto("/#/hoodiegen");
@@ -60,7 +60,9 @@ if (process.env.HOODIE_FIXTURE)
     await expect(
       page.getByRole("button", { name: "Download 3MF", exact: true }),
     ).toBeEnabled({ timeout: 60000 });
-    const dl = page.waitForEvent("download", { timeout: 60000 });
+    await page.getByRole("checkbox", { name: "Smooth color edges (beta)" }).check();
+    await expect(page.getByRole("button", { name: "Download 3MF", exact: true })).toBeEnabled({timeout:90000});
+    const dl = page.waitForEvent("download", { timeout: 90000 });
     await page
       .getByRole("button", { name: "Download 3MF", exact: true })
       .click();

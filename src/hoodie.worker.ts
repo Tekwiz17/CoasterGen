@@ -16,7 +16,7 @@ self.onmessage = ({ data }) => {
       if (data.type === "export")
         self.postMessage({
           id: data.id,
-          bytes: exportHoodie(hoodie, result.slots, result.colors),
+          bytes: exportHoodie(result.hoodie, result.slots, result.colors),
         });
       else
         self.postMessage({

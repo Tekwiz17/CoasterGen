@@ -1,3 +1,4 @@
+import { refineColorEdges } from "./hoodierefine";
 import { panels, atlasUV } from "./hoodiemap";
 import { unzipSync, zipSync, strFromU8, strToU8 } from "fflate";
 import { quantize, findEdgeBlends, resolveEdgeBlends } from "./palette";
@@ -19,6 +20,7 @@ export type Design = {
   auto: boolean;
   remove: boolean;
   smooth: boolean;
+  betaEdges?: boolean;
 };
 export function paintCode(slot: number) {
   return slot < 3
@@ -77,7 +79,7 @@ export function loadHoodie(bytes: Uint8Array) {
   return { files, key, xml, points, faces, height: max[2] - min[2] };
 }
 export type Hoodie = ReturnType<typeof loadHoodie>;
-export function colorHoodie(h: Hoodie, d: Design) {
+export function colorHoodie(h: Hoodie, d: Design, pass = 0): {model:ModelData;slots:Uint8Array;colors:string[];hoodie:Hoodie} {
   const rasters = [
     d.mode === "map" ? d.map : d.front,
     d.mode === "image" ? d.back : undefined,
@@ -187,7 +189,14 @@ export function colorHoodie(h: Hoodie, d: Design) {
     slots[i] = slot;
 
   });
-  if (d.smooth && valid.length) {
+  if (d.betaEdges && valid.length && pass < 2) {
+    let refined;
+    try { refined=refineColorEdges(h.points,h.faces,slots); }
+    catch(error) { if (!(error instanceof RangeError) || pass===0) throw error; }
+    if(!refined) return colorHoodie(h,d,2);
+    if(refined.faces!==h.faces) return colorHoodie({...h,...refined}, {...d,auto:false,colors},pass+1);
+  }
+  if (d.smooth && valid.length && !d.betaEdges) {
     // Remove isolated facet speckles using shared mesh vertices. Strong boundaries survive.
     const counts = new Uint32Array(h.points.length);
     for (const f of h.faces) for (const v of f) counts[v]++;
@@ -227,13 +236,26 @@ export function colorHoodie(h: Hoodie, d: Design) {
     triangles: h.faces.length,
     warnings: [],
   };
-  return { model, slots, colors };
+  return { model, slots, colors, hoodie:h };
 }
 export function exportHoodie(h: Hoodie, slots: Uint8Array, colors: string[]) {
   const files = { ...h.files };
   let i = 0;
+  let sourceXml=h.xml;
+  const originalCount=(h.xml.match(/<triangle\s/g)||[]).length;
+  if(h.faces.length!==originalCount){
+    if((h.xml.match(/<mesh>/g)||[]).length!==1)throw Error("Beta refinement requires a single mesh.");
+    const match=h.xml.match(/<vertex\s+[^>]*x="([^"]+)"\s+y="([^"]+)"\s+z="([^"]+)"/);
+    if(!match)throw Error("Missing mesh origin.");
+    const offset=[+match[1]-h.points[0][0],+match[2]-h.points[0][1],+match[3]-h.points[0][2]];
+    const vertices=h.points.map(p=>'<vertex x="'+(p[0]+offset[0])+'" y="'+(p[1]+offset[1])+'" z="'+(p[2]+offset[2])+'"/>').join("");
+    const faces=h.faces.map(f=>'<triangle v1="'+f[0]+'" v2="'+f[1]+'" v3="'+f[2]+'"/>').join("");
+    const configKey="Metadata/model_settings.config";
+    if(files[configKey]) files[configKey]=strToU8(strFromU8(files[configKey]).replace(/face_count="\d+"/g,'face_count="'+h.faces.length+'"'));
+    sourceXml=h.xml.replace(/<vertices>[\s\S]*?<\/vertices>/,"<vertices>"+vertices+"</vertices>").replace(/<triangles>[\s\S]*?<\/triangles>/,"<triangles>"+faces+"</triangles>");
+  }
   files[h.key] = strToU8(
-    h.xml
+    sourceXml
       .replace(/<triangle\s[^>]*\/>/g, (t) =>
         t
           .replace(/\s(?:paint_color|p1|p2|p3|pid)="[^"]*"/g, "")
