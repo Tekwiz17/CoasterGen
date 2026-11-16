@@ -102,5 +102,13 @@ test("V2 reaches body edges, hood sides and cuffs without unequal scaling",()=>{
  const a=panelPoint(x,-25,40,106,118),b=panelPoint(x+1,-25,41,106,118);
  assert.ok(Math.abs((b.u-a.u)*panels[0].w+(b.v-a.v)*panels[0].h)<1e-8);
  }
- assert.match(mapTemplate(),/FULL COVERAGE V2/);
+ assert.match(mapTemplate(),/FULL WRAP V3/);
+});
+
+test("V3 sleeve coordinates cross the outer side continuously without mirroring",()=>{
+ const a=panelPoint(50,-1,40,106,118,1,3),b=panelPoint(50,1,40,106,118,1,3);
+ assert.ok(a.u<.5);assert.ok(b.u>.5);assert.ok(Math.abs(a.u+b.u-1)<1e-10);
+ const oldA=panelPoint(50,-1,40,106,118,1,2),oldB=panelPoint(50,1,40,106,118,1,2);
+ assert.equal(oldA.u,oldB.u);
+ assert.ok(panels[2].w/panels[2].h>.8);
 });

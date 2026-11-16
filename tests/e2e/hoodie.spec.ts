@@ -13,7 +13,7 @@ test("HoodieGen home and two design paths", async ({ page }) => {
     page.getByRole("button", { name: "Download 3MF", exact: true }),
   ).toBeEnabled({ timeout: 90000 });
   await page.getByRole("button", { name: "Surface map Advanced" }).click();
-  await expect(page.getByLabel("Template layout")).toHaveValue("2");
+  await expect(page.getByLabel("Template layout")).toHaveValue("3");
   const dl = page.waitForEvent("download");
   await page.getByRole("button", { name: "Download map template" }).click();
   expect((await dl).suggestedFilename()).toBe("HoodieGen-map-template.svg");
@@ -64,7 +64,8 @@ if (process.env.HOODIE_FIXTURE)
     await expect(
       page.getByRole("button", { name: "Download 3MF", exact: true }),
     ).toBeEnabled({ timeout: 60000 });
-    await page.getByRole("checkbox", { name: "Smooth color edges (beta)" }).check();
+    await page.getByLabel("Edge smoothing").fill("10");
+    await expect(page.getByLabel("Edge smoothing")).toHaveValue("10");
     await expect(page.getByRole("button", { name: "Download 3MF", exact: true })).toBeEnabled({timeout:90000});
     const dl = page.waitForEvent("download", { timeout: 90000 });
     await page

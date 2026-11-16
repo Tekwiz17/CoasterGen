@@ -1,5 +1,5 @@
 import { refineColorEdges } from "./hoodierefine";
-import { panels, legacyPanels, atlasUV } from "./hoodiemap";
+import { panels, layoutPanels, atlasUV } from "./hoodiemap";
 import { unzipSync, zipSync, strFromU8, strToU8 } from "fflate";
 import { quantize, findEdgeBlends, resolveEdgeBlends } from "./palette";
 import { removeEdgeBackground } from "./background";
@@ -21,6 +21,7 @@ export type Design = {
   remove: boolean;
   smooth: boolean;
   betaEdges?: boolean;
+  smoothing?: number;
   mapScale?: number;
   mapLayout?: number;
 };
@@ -106,7 +107,7 @@ export function colorHoodie(h: Hoodie, d: Design, pass = 0): {model:ModelData;sl
   let baseColor = d.colors[0];
   if (d.mode === "map" && d.auto && valid.length) {
     const counts = new Map<string, number>();
-    for (let i=0; i<pixels.length/4; i++) { if(transparent[i]) continue; const r=valid[0];const x=(i%r.width)/r.width*2048,y=Math.floor(i/r.width)/r.height*1024;if(!(d.mapLayout===1?legacyPanels:panels).some(p=>x>=p.x+p.w*.27&&x<=p.x+p.w*.73&&y>=p.y+p.h*.12&&y<=p.y+p.h*.95))continue; const k = "#" + Array.from(pixels.slice(i*4,i*4+3)).map(v=>v.toString(16).padStart(2,"0")).join(""); counts.set(k,(counts.get(k)||0)+1); }
+    for (let i=0; i<pixels.length/4; i++) { if(transparent[i]) continue; const r=valid[0];const x=(i%r.width)/r.width*2048,y=Math.floor(i/r.width)/r.height*1024;if(!layoutPanels(d.mapLayout).some(p=>x>=p.x+p.w*.27&&x<=p.x+p.w*.73&&y>=p.y+p.h*.12&&y<=p.y+p.h*.95))continue; const k = "#" + Array.from(pixels.slice(i*4,i*4+3)).map(v=>v.toString(16).padStart(2,"0")).join(""); counts.set(k,(counts.get(k)||0)+1); }
     baseColor = [...counts].sort((a,b)=>b[1]-a[1])[0]?.[0] ?? baseColor;
   }
   const q = valid.length
@@ -155,6 +156,8 @@ export function colorHoodie(h: Hoodie, d: Design, pass = 0): {model:ModelData;sl
     const i = Math.floor(v * r.height) * r.width + Math.floor(u * r.width);
     return transparent[start + i] ? 0 : q!.labels[start + i];
   };
+  const quality=Math.max(1,Math.min(10,Math.round(d.smoothing??(d.betaEdges?6:1))));
+  const passes=quality===1?0:Math.ceil((quality-1)/3);
   const slots = new Uint8Array(h.faces.length);
   let meshWidth=0;for(const p of h.points)meshWidth=Math.max(meshWidth,Math.abs(p[0])*2);
 
@@ -192,14 +195,20 @@ export function colorHoodie(h: Hoodie, d: Design, pass = 0): {model:ModelData;sl
     slots[i] = slot;
 
   });
-  if (d.betaEdges && valid.length && pass < 2) {
+  if (quality>1 && valid.length && pass < passes) {
     let refined;
-    try { refined=refineColorEdges(h.points,h.faces,slots); }
+    const at=(p:number[])=>{
+      if(d.mode==="map"){const uv=atlasUV(p[0],p[1],p[2],h.height,meshWidth,d.mapScale,d.mapLayout);return sample(d.map,uv[0],uv[1],0);}
+      const front=p[1]<0,r=front?d.front:d.back,t=front?d.frontPlace:d.backPlace;
+      if(!r || Math.abs(p[0])>=34)return 0;
+      return sample(r,((front?p[0]:-p[0])-t.x)/t.width+.5,.5-(p[2]-t.z)/(t.width*r.height/r.width),front?0:(d.front?.width??0)*(d.front?.height??0));
+    };
+    try { refined=refineColorEdges(h.points,h.faces,slots,1800000,at,quality+3,(11-quality)*.025); }
     catch(error) { if (!(error instanceof RangeError) || pass===0) throw error; }
-    if(!refined) return colorHoodie(h,d,2);
+    if(!refined) return colorHoodie(h,d,passes);
     if(refined.faces!==h.faces) return colorHoodie({...h,...refined}, {...d,auto:false,colors},pass+1);
   }
-  if (d.smooth && valid.length && !d.betaEdges) {
+  if (d.smooth && valid.length && quality===1) {
     // Remove isolated facet speckles using shared mesh vertices. Strong boundaries survive.
     const counts = new Uint32Array(h.points.length);
     for (const f of h.faces) for (const v of f) counts[v]++;

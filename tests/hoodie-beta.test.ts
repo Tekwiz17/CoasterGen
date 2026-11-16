@@ -7,7 +7,7 @@ const edges=new Map<string,number>();for(const f of r.faces)for(let i=0;i<3;i++)
 assert.ok([...edges.values()].every(n=>n===2));
 const vol=(p:number[][],f:number[][])=>f.reduce((sum,[a,b,c])=>sum+(p[a][0]*(p[b][1]*p[c][2]-p[b][2]*p[c][1])+p[a][1]*(p[b][2]*p[c][0]-p[b][0]*p[c][2])+p[a][2]*(p[b][0]*p[c][1]-p[b][1]*p[c][0]))/6,0);
 assert.ok(Math.abs(vol(p,f)-vol(r.points,r.faces))<1e-12);
-assert.throws(()=>refineColorEdges(p,f,new Uint8Array([0,1,0,0]),5));
+assert.ok(refineColorEdges(p,f,new Uint8Array([0,1,0,0]),5).faces.length<=5);
 });
 test("adaptive transitions preserve orientation and area without hanging vertices",()=>{
 const points:number[][]=[],faces:number[][]=[];
@@ -34,4 +34,22 @@ assert.ok(out.includes('<vertex x="10" y="20" z="30"/>'));
 assert.equal(loadHoodie(bytes).faces.length,r.faces.length);
 assert.equal(strFromU8(files["Metadata/model_settings.config"]),'<mesh_stat face_count="'+r.faces.length+'"/>');
 assert.deepEqual([...out.matchAll(/paint_color="([^"]+)"/g)].map(m=>m[1]),Array.from(slots,s=>paintCode(s+1)));
+});
+
+test("refinement places shared vertices on a straight artwork boundary",()=>{
+ const points=[[0,0,0],[1,0,0],[1,1,0],[0,1,0]],faces=[[0,1,2],[0,2,3]];
+ const r=refineColorEdges(points,faces,new Uint8Array([1,0]),100,p=>p[0]>.3?1:0,14);
+ assert.ok(r.points.some(p=>Math.abs(p[0]-.3)<.0001));
+ for(const f of r.faces){const xs=f.map(i=>r.points[i][0]);assert.ok(Math.min(...xs)>=.2999||Math.max(...xs)<=.3001);}
+});
+
+test("budgeted refinement keeps shared edges closed",()=>{
+ const p=[[0,0,0],[1,0,0],[0,1,0],[0,0,1]],f=[[0,2,1],[0,1,3],[1,2,3],[2,0,3]];
+ for(const limit of [6,8,10,12]){
+  const r=refineColorEdges(p,f,new Uint8Array([0,1,0,0]),limit,v=>v[0]>.3?1:0,12);
+  assert.ok(r.faces.length<=limit);
+  const edges=new Map<string,number>();
+  for(const face of r.faces)for(let j=0;j<3;j++){const a=face[j],b=face[(j+1)%3],k=Math.min(a,b)+":"+Math.max(a,b);edges.set(k,(edges.get(k)||0)+1);}
+  assert.ok([...edges.values()].every(n=>n===2));
+ }
 });

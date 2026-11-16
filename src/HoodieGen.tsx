@@ -1,6 +1,6 @@
 import ImportDialog from "./components/ImportDialog";
 import type { Project, Artwork } from "./types";
-import { panels, legacyPanels, mapTemplate } from "./lib/hoodiemap";
+import { panels, layoutPanels, mapTemplate } from "./lib/hoodiemap";
 import { useEffect, useRef, useState } from "react";
 import { Download, Shirt, Upload, RotateCcw } from "lucide-react";
 import { MakerHeader } from "./MakerGen";
@@ -18,13 +18,15 @@ const initial: Design = {
   auto: true,
   remove: true,
   smooth: true,
+  smoothing: 5,
+  mapLayout: 3,
 };
 export default function HoodieGen() {
   const [editing, setEditing] = useState<{source:string;name:string;key:"front"|"back"|"map"} | null>(null);
   const [colorLimit, setColorLimit] = useState(4);
   const [idea, setIdea] = useState("");
   const [promptCopied, setPromptCopied] = useState(false);
-  const aiPrompt = `Edit the uploaded HoodieGen PNG template into this design: ${idea || "[describe your hoodie]"}. Use at most ${colorLimit} flat solid colors, including the garment base. Keep the exact 2048 × 1024 canvas and every piece position, outline, and size. Use the Full coverage (V2) layout. Extend background patterns all the way to every piece edge; keep important logos inside the center. Fill every garment piece completely, including sleeves and hood. Keep the space outside pieces transparent. No shadows, gradients, texture, labels, guides, mockup, or 3D perspective. Keep logos and text centered away from seams. Return only the finished flat template PNG.`;
+  const aiPrompt = `Edit the uploaded HoodieGen PNG template into this design: ${idea || "[describe your hoodie]"}. Use at most ${colorLimit} flat solid colors, including the garment base. Keep the exact 2048 × 1024 canvas and every piece position, outline, and size. Use the Full wrap (V3) layout. Extend background patterns all the way to every piece edge; keep important logos inside the center. Each sleeve panel wraps once around the entire arm: make its left and right edges join seamlessly, without mirroring the design. Fill every garment piece completely, including sleeves and hood. Keep the space outside pieces transparent. No shadows, gradients, texture, labels, guides, mockup, or 3D perspective. Keep logos and text centered away from seams. Return only the finished flat template PNG.`;
   const [d, setD] = useState<Design>(initial),
     [ready, setReady] = useState(false),
     [busy, setBusy] = useState(""),
@@ -147,7 +149,7 @@ export default function HoodieGen() {
       if(key==="map") {
         const counts=new Map<string,number>();
         for(let i=0;i<r.width*r.height;i++){const x=(i%r.width)/r.width*2048,y=Math.floor(i/r.width)/r.height*1024;
-          if(r.data[i*4+3]<128 || !(d.mapLayout===1?legacyPanels:panels).some(p=>x>p.x+p.w*.27&&x<p.x+p.w*.73&&y>p.y+p.h*.12&&y<p.y+p.h*.95))continue;
+          if(r.data[i*4+3]<128 || !layoutPanels(d.mapLayout).some(p=>x>p.x+p.w*.27&&x<p.x+p.w*.73&&y>p.y+p.h*.12&&y<p.y+p.h*.95))continue;
           const c="#"+Array.from(r.data.slice(i*4,i*4+3)).map(v=>v.toString(16).padStart(2,"0")).join("");counts.set(c,(counts.get(c)||0)+1);
         }
         const dominant=[...counts].sort((a,b)=>b[1]-a[1])[0]?.[0];
@@ -520,14 +522,16 @@ export default function HoodieGen() {
                   </label>
                 </>
               )}
-              {d.mode==="map" && <div><label className="hoodie-range">Template layout<select aria-label="Template layout" value={d.mapLayout??2} onChange={e=>patch({mapLayout:+e.target.value})}><option value={2}>Full coverage (V2)</option><option value={1}>Original narrow template (V1)</option></select></label><small>Download the new V2 template for wider coverage. Older maps need V1; regenerate artwork on V2 to fill the sides and hood.</small>
+              {d.mode==="map" && <div><label className="hoodie-range">Template layout<select aria-label="Template layout" value={d.mapLayout??3} onChange={e=>patch({mapLayout:+e.target.value})}><option value={3}>Full wrap sleeves (V3)</option><option value={2}>Full coverage (V2)</option><option value={1}>Original narrow template (V1)</option></select></label><small>Download V3 for sleeves that wrap once without mirroring. Regenerate sleeve artwork on V3; choose V2 or V1 for older maps.</small>
                 <label className="hoodie-range">Artwork size · {Math.round((d.mapScale??1)*100)}%
                   <input aria-label="Map artwork size" type="range" min="0.5" max="2" step="0.05" value={d.mapScale??1} onChange={e=>patch({mapScale:+e.target.value})}/>
                 </label>
                 <small>Proportions stay locked. Increase size to fill more of each piece; artwork beyond the seams is cropped. Uncovered areas use the base color.</small>
               </div>}
-              <label className="hoodie-check"><input type="checkbox" checked={!!d.betaEdges} onChange={e=>patch({betaEdges:e.target.checked})}/> Smooth color edges (beta)</label>
-              <small>Refines the mesh along color boundaries in both preview and 3MF. Takes longer and creates larger files.</small>
+              <label className="hoodie-range">Edge smoothing (beta) · {d.smoothing??(d.betaEdges?6:1)} / 10
+                <input aria-label="Edge smoothing" type="range" min="1" max="10" step="1" value={d.smoothing??(d.betaEdges?6:1)} onChange={e=>patch({smoothing:+e.target.value})}/>
+              </label>
+              <small>1: original facets. 10: finer edges placed along artwork boundaries. Higher levels take longer and create larger files. Refinement is capped to protect browser memory; folds still bend the artwork.</small>
               <label className="hoodie-range">
                 Filament colors{" "}
                 <select

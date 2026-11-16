@@ -9,8 +9,8 @@ export const legacyPanels = [
   { name: "HOOD FRONT", x: 1335, y: 95, w: 260, h: 230, kind: "hood" },
   { name: "HOOD BACK", x: 1715, y: 95, w: 260, h: 230, kind: "hood" },
 ] as const;
-// V2 panels include enough painted width to cover the garment at equal X/Y scale.
-export const panels = [
+// V3 panels include enough painted width to cover the garment at equal X/Y scale.
+export const v2Panels = [
  {name:"FRONT",x:30,y:200,w:620,h:700,kind:"body"},
  {name:"BACK",x:680,y:200,w:620,h:700,kind:"body"},
  {name:"RIGHT SLEEVE",x:1340,y:330,w:320,h:590,kind:"sleeve"},
@@ -18,6 +18,8 @@ export const panels = [
  {name:"HOOD FRONT",x:1340,y:150,w:320,h:95,kind:"hood"},
  {name:"HOOD BACK",x:1700,y:150,w:320,h:95,kind:"hood"},
 ] as const;
+export const panels=v2Panels.map(p=>p.kind==="sleeve"?{...p,h:375}:p);
+export const layoutPanels=(layout=3)=>layout===1?legacyPanels:layout===2?v2Panels:panels;
 function span(kind: string, t: number, legacy=false): [number, number] {
   if(!legacy) {
     // Shallow shoulder shaping leaves a generous full-width paint/bleed area.
@@ -39,7 +41,7 @@ function span(kind: string, t: number, legacy=false): [number, number] {
  * scale in both axes. Uncovered garment stays base-colored.
  * Sleeve coordinates are mirrored around the same centerline on both arms.
  */
-export function panelPoint(x:number,y:number,z:number,height:number,width:number,zoom=1,layout=2) {
+export function panelPoint(x:number,y:number,z:number,height:number,width:number,zoom=1,layout=3) {
   const t=Math.max(0,Math.min(1,z/height));
   const bodyHalf=width*0.288;
   let index:number, across:number, down:number, physicalHeight:number;
@@ -54,7 +56,7 @@ export function panelPoint(x:number,y:number,z:number,height:number,width:number
     // one sleeve's design independently of the other.
     const center=width*(0.39-0.07*t);
     const radius=width*0.105;
-    const angle=Math.atan2((Math.abs(x)-center)/radius,Math.abs(y)/(width*0.25));
+    const angle=layout<3 ? Math.atan2((Math.abs(x)-center)/radius,Math.abs(y)/(width*0.25)) : Math.atan2(y/(width*0.25),(Math.abs(x)-center)/radius);
     across=angle*radius;
     physicalHeight=height*(layout===1?0.78:0.86);
     down=height*(layout===1?0.82:0.86)-z;
@@ -64,13 +66,15 @@ export function panelPoint(x:number,y:number,z:number,height:number,width:number
     physicalHeight=height*0.78;
     down=physicalHeight-z;
   }
-  const p=(layout===1?legacyPanels:panels)[index];
+  const p=layoutPanels(layout)[index];
   const scale=physicalHeight/p.h*Math.max(0.5,Math.min(2,zoom));
-  return {index,u:0.5+across/(scale*p.w),v:0.5+(down-physicalHeight/2)/(scale*p.h)};
+  // V3 wraps once, with the only seam on the inward-facing arm.
+  const sleeveU=layout>=3 && p.kind==="sleeve" ? 0.5+across/(Math.PI*2*width*0.105)*0.98/Math.max(0.5,Math.min(2,zoom)) : 0.5+across/(scale*p.w);
+  return {index,u:sleeveU,v:0.5+(down-physicalHeight/2)/(scale*p.h)};
 }
-export function atlasUV(x:number,y:number,z:number,height:number,width:number,zoom=1,layout=2) {
+export function atlasUV(x:number,y:number,z:number,height:number,width:number,zoom=1,layout=3) {
   const {index,u,v}=panelPoint(x,y,z,height,width,zoom,layout);
-  const p=(layout===1?legacyPanels:panels)[index];
+  const p=layoutPanels(layout)[index];
   if(v<0 || v>=1)return [-1,-1];
   const [left,right]=span(p.kind,v,layout===1);
   if(u<left || u>right)return [-1,-1];
@@ -94,5 +98,5 @@ export function mapTemplate(guides = true) {
       return `<path d="${path}" fill="#e4e8dc"/>${guides ? `<path d="${path}" fill="none" stroke="#476459" stroke-width="3" stroke-dasharray="10 8"/><text x="${p.x + p.w / 2}" y="${p.y - 18}" text-anchor="middle">${p.name}</text><path d="M${p.x + p.w / 2},${p.y + 35}V${p.y + p.h - 25}" stroke="#476459" stroke-opacity=".35" stroke-dasharray="7 9"/>` : ""}`;
     })
     .join("");
-  return `<svg xmlns="http://www.w3.org/2000/svg" width="2048" height="1024" viewBox="0 0 2048 1024"><title>HoodieGen V2 full-coverage atlas</title><desc>V2 full-coverage layout. Select Full coverage (V2) when importing. Keep all six pieces in place. Front and back, detached tapered sleeves, and separate hood panels. Top is shoulder or hood crown. Bottom is hem or cuff. Paint inside the shapes. Remove the guides group before importing.</desc><g font-family="sans-serif" font-size="22" fill="#476459">${guides ? '<text x="55" y="55" font-size="32">HOODIEGEN / FULL COVERAGE V2</text><text x="55" y="95">2048 × 1024 · V2 layout · Fill entire pieces to the edges · Remove guides before upload</text>' : ""}${shapes}</g></svg>`;
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="2048" height="1024" viewBox="0 0 2048 1024"><title>HoodieGen V3 full-coverage atlas</title><desc>V3 full-coverage layout. Select Full wrap (V3) when importing. Keep all six pieces in place. Front and back, full-wrap sleeves, and separate hood panels. Each sleeve runs once around the arm; its left and right edges meet at the inner-arm seam. Make those two edges match. Top is shoulder or hood crown. Bottom is hem or cuff. Paint inside the shapes. Remove the guides group before importing.</desc><g font-family="sans-serif" font-size="22" fill="#476459">${guides ? '<text x="55" y="55" font-size="32">HOODIEGEN / FULL WRAP V3</text><text x="55" y="95">2048 × 1024 · V3 layout · Fill entire pieces to the edges · Remove guides before upload</text>' : ""}${shapes}</g></svg>`;
 }
