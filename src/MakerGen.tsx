@@ -100,11 +100,7 @@ export default function MakerGen() {
             <section aria-label="MakerGen tools" className="maker-tools">
               <a className="maker-tool" href="#/hoodiegen">
                 <div className="tool-art hoodie-home-art" aria-hidden="true">
-                  <span>
-                    YOUR
-                    <br />
-                    STYLE.
-                  </span>
+                  <img src="/hoodie-home.png" alt="" style={{width:"100%",height:"100%",objectFit:"contain",padding:"24px 24px 42px"}} />
                   <span className="tool-tag">ARTWORK → HOODIE PEN POT</span>
                 </div>
                 <div className="tool-copy">

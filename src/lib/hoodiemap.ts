@@ -1,7 +1,7 @@
 // The atlas and sampler share panel geometry so the SVG matches printed artwork.
 export const MAP_WIDTH = 2048,
   MAP_HEIGHT = 1024;
-export const panels = [
+export const legacyPanels = [
   { name: "FRONT", x: 55, y: 185, w: 570, h: 740, kind: "body" },
   { name: "BACK", x: 695, y: 185, w: 570, h: 740, kind: "body" },
   { name: "RIGHT SLEEVE", x: 1335, y: 390, w: 260, h: 535, kind: "sleeve" },
@@ -9,7 +9,21 @@ export const panels = [
   { name: "HOOD FRONT", x: 1335, y: 95, w: 260, h: 230, kind: "hood" },
   { name: "HOOD BACK", x: 1715, y: 95, w: 260, h: 230, kind: "hood" },
 ] as const;
-function span(kind: string, t: number): [number, number] {
+// V2 panels include enough painted width to cover the garment at equal X/Y scale.
+export const panels = [
+ {name:"FRONT",x:30,y:200,w:620,h:700,kind:"body"},
+ {name:"BACK",x:680,y:200,w:620,h:700,kind:"body"},
+ {name:"RIGHT SLEEVE",x:1340,y:330,w:320,h:590,kind:"sleeve"},
+ {name:"LEFT SLEEVE",x:1700,y:330,w:320,h:590,kind:"sleeve"},
+ {name:"HOOD FRONT",x:1340,y:150,w:320,h:95,kind:"hood"},
+ {name:"HOOD BACK",x:1700,y:150,w:320,h:95,kind:"hood"},
+] as const;
+function span(kind: string, t: number, legacy=false): [number, number] {
+  if(!legacy) {
+    // Shallow shoulder shaping leaves a generous full-width paint/bleed area.
+    const inset=kind==="body" ? 0.01+0.015*Math.max(0,1-t/0.08) : 0.01;
+    return [inset,1-inset];
+  }
   if (kind === "body") {
     if (t < 0.1) return [0.2 - 1.4 * t, 0.8 + 1.4 * t];
     if (t < 0.25)
@@ -25,11 +39,11 @@ function span(kind: string, t: number): [number, number] {
  * scale in both axes. Uncovered garment stays base-colored.
  * Sleeve coordinates are mirrored around the same centerline on both arms.
  */
-export function panelPoint(x:number,y:number,z:number,height:number,width:number,zoom=1) {
+export function panelPoint(x:number,y:number,z:number,height:number,width:number,zoom=1,layout=2) {
   const t=Math.max(0,Math.min(1,z/height));
   const bodyHalf=width*0.288;
   let index:number, across:number, down:number, physicalHeight:number;
-  if(t>0.78 && Math.abs(x)<bodyHalf) {
+  if(t>0.78 && (Math.abs(x)<bodyHalf || (layout!==1 && t>0.86))) {
     index=y<0?4:5;
     across=y<0?x:-x;
     physicalHeight=height*0.22;
@@ -42,23 +56,23 @@ export function panelPoint(x:number,y:number,z:number,height:number,width:number
     const radius=width*0.105;
     const angle=Math.atan2((Math.abs(x)-center)/radius,Math.abs(y)/(width*0.25));
     across=angle*radius;
-    physicalHeight=height*0.78;
-    down=height*0.82-z;
+    physicalHeight=height*(layout===1?0.78:0.86);
+    down=height*(layout===1?0.82:0.86)-z;
   } else {
     index=y<0?0:1;
     across=y<0?x:-x;
     physicalHeight=height*0.78;
     down=physicalHeight-z;
   }
-  const p=panels[index];
+  const p=(layout===1?legacyPanels:panels)[index];
   const scale=physicalHeight/p.h*Math.max(0.5,Math.min(2,zoom));
   return {index,u:0.5+across/(scale*p.w),v:0.5+(down-physicalHeight/2)/(scale*p.h)};
 }
-export function atlasUV(x:number,y:number,z:number,height:number,width:number,zoom=1) {
-  const {index,u,v}=panelPoint(x,y,z,height,width,zoom);
-  const p=panels[index];
+export function atlasUV(x:number,y:number,z:number,height:number,width:number,zoom=1,layout=2) {
+  const {index,u,v}=panelPoint(x,y,z,height,width,zoom,layout);
+  const p=(layout===1?legacyPanels:panels)[index];
   if(v<0 || v>=1)return [-1,-1];
-  const [left,right]=span(p.kind,v);
+  const [left,right]=span(p.kind,v,layout===1);
   if(u<left || u>right)return [-1,-1];
   return [(p.x+p.w*u)/MAP_WIDTH,(p.y+p.h*v)/MAP_HEIGHT];
 }
@@ -80,5 +94,5 @@ export function mapTemplate(guides = true) {
       return `<path d="${path}" fill="#e4e8dc"/>${guides ? `<path d="${path}" fill="none" stroke="#476459" stroke-width="3" stroke-dasharray="10 8"/><text x="${p.x + p.w / 2}" y="${p.y - 18}" text-anchor="middle">${p.name}</text><path d="M${p.x + p.w / 2},${p.y + 35}V${p.y + p.h - 25}" stroke="#476459" stroke-opacity=".35" stroke-dasharray="7 9"/>` : ""}`;
     })
     .join("");
-  return `<svg xmlns="http://www.w3.org/2000/svg" width="2048" height="1024" viewBox="0 0 2048 1024"><title>HoodieGen flattened sweatshirt atlas</title><desc>Keep all six pieces in place. Front and back, detached tapered sleeves, and separate hood panels. Top is shoulder or hood crown. Bottom is hem or cuff. Paint inside the shapes. Remove the guides group before importing.</desc><g font-family="sans-serif" font-size="22" fill="#476459">${guides ? '<text x="55" y="55" font-size="32">HOODIEGEN / DESIGN YOUR HOODIE</text><text x="55" y="95">2048 × 1024 · Keep panel positions · Paint inside pieces · Remove guides before upload</text>' : ""}${shapes}</g></svg>`;
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="2048" height="1024" viewBox="0 0 2048 1024"><title>HoodieGen V2 full-coverage atlas</title><desc>V2 full-coverage layout. Select Full coverage (V2) when importing. Keep all six pieces in place. Front and back, detached tapered sleeves, and separate hood panels. Top is shoulder or hood crown. Bottom is hem or cuff. Paint inside the shapes. Remove the guides group before importing.</desc><g font-family="sans-serif" font-size="22" fill="#476459">${guides ? '<text x="55" y="55" font-size="32">HOODIEGEN / FULL COVERAGE V2</text><text x="55" y="95">2048 × 1024 · V2 layout · Fill entire pieces to the edges · Remove guides before upload</text>' : ""}${shapes}</g></svg>`;
 }

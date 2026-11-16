@@ -91,5 +91,16 @@ test("zoom preserves aspect ratio and out-of-panel coordinates use base",()=>{
  const a=panelPoint(5,-25,40,100,118,1),b=panelPoint(5,-25,40,100,118,2);
  assert.ok(Math.abs((a.u-.5)/2-(b.u-.5))<1e-12);
  assert.ok(Math.abs((a.v-.5)/2-(b.v-.5))<1e-12);
- assert.deepEqual(atlasUV(30,-25,40,100,118),[-1,-1]);
+ assert.deepEqual(atlasUV(30,-25,40,100,118,1,1),[-1,-1]);
+});
+
+test("V2 reaches body edges, hood sides and cuffs without unequal scaling",()=>{
+ for(const [x,y,z] of [[-33,-25,5],[33,-25,40],[-33,25,75],[33,-20,95],[-33,-20,99],[45,-25,5],[-45,-25,85]]){
+ const uv=atlasUV(x,y,z,106,118);assert.ok(uv[0]>=0 && uv[1]>=0,JSON.stringify([x,y,z]));
+ }
+ for(const x of [-32,0,32]){
+ const a=panelPoint(x,-25,40,106,118),b=panelPoint(x+1,-25,41,106,118);
+ assert.ok(Math.abs((b.u-a.u)*panels[0].w+(b.v-a.v)*panels[0].h)<1e-8);
+ }
+ assert.match(mapTemplate(),/FULL COVERAGE V2/);
 });

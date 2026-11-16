@@ -1,5 +1,5 @@
 import { refineColorEdges } from "./hoodierefine";
-import { panels, atlasUV } from "./hoodiemap";
+import { panels, legacyPanels, atlasUV } from "./hoodiemap";
 import { unzipSync, zipSync, strFromU8, strToU8 } from "fflate";
 import { quantize, findEdgeBlends, resolveEdgeBlends } from "./palette";
 import { removeEdgeBackground } from "./background";
@@ -22,6 +22,7 @@ export type Design = {
   smooth: boolean;
   betaEdges?: boolean;
   mapScale?: number;
+  mapLayout?: number;
 };
 export function paintCode(slot: number) {
   return slot < 3
@@ -105,7 +106,7 @@ export function colorHoodie(h: Hoodie, d: Design, pass = 0): {model:ModelData;sl
   let baseColor = d.colors[0];
   if (d.mode === "map" && d.auto && valid.length) {
     const counts = new Map<string, number>();
-    for (let i=0; i<pixels.length/4; i++) { if(transparent[i]) continue; const r=valid[0];const x=(i%r.width)/r.width*2048,y=Math.floor(i/r.width)/r.height*1024;if(!panels.some(p=>x>=p.x+p.w*.27&&x<=p.x+p.w*.73&&y>=p.y+p.h*.12&&y<=p.y+p.h*.95))continue; const k = "#" + Array.from(pixels.slice(i*4,i*4+3)).map(v=>v.toString(16).padStart(2,"0")).join(""); counts.set(k,(counts.get(k)||0)+1); }
+    for (let i=0; i<pixels.length/4; i++) { if(transparent[i]) continue; const r=valid[0];const x=(i%r.width)/r.width*2048,y=Math.floor(i/r.width)/r.height*1024;if(!(d.mapLayout===1?legacyPanels:panels).some(p=>x>=p.x+p.w*.27&&x<=p.x+p.w*.73&&y>=p.y+p.h*.12&&y<=p.y+p.h*.95))continue; const k = "#" + Array.from(pixels.slice(i*4,i*4+3)).map(v=>v.toString(16).padStart(2,"0")).join(""); counts.set(k,(counts.get(k)||0)+1); }
     baseColor = [...counts].sort((a,b)=>b[1]-a[1])[0]?.[0] ?? baseColor;
   }
   const q = valid.length
@@ -171,7 +172,7 @@ export function colorHoodie(h: Hoodie, d: Design, pass = 0): {model:ModelData;sl
       ];
     let slot = 0;
     if (d.mode === "map" && n[0]*p[0]+n[1]*p[1] > 0) {
-      const uv = atlasUV(p[0], p[1], p[2], h.height, meshWidth, d.mapScale);
+      const uv = atlasUV(p[0], p[1], p[2], h.height, meshWidth, d.mapScale, d.mapLayout);
       slot = sample(d.map, uv[0], uv[1], 0);
     } else if (d.mode === "image") {
       const front = p[1] < 0;

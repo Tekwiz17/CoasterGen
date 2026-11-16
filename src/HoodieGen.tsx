@@ -1,6 +1,6 @@
 import ImportDialog from "./components/ImportDialog";
 import type { Project, Artwork } from "./types";
-import { panels, mapTemplate } from "./lib/hoodiemap";
+import { panels, legacyPanels, mapTemplate } from "./lib/hoodiemap";
 import { useEffect, useRef, useState } from "react";
 import { Download, Shirt, Upload, RotateCcw } from "lucide-react";
 import { MakerHeader } from "./MakerGen";
@@ -24,7 +24,7 @@ export default function HoodieGen() {
   const [colorLimit, setColorLimit] = useState(4);
   const [idea, setIdea] = useState("");
   const [promptCopied, setPromptCopied] = useState(false);
-  const aiPrompt = `Edit the uploaded HoodieGen PNG template into this design: ${idea || "[describe your hoodie]"}. Use at most ${colorLimit} flat solid colors, including the garment base. Keep the exact 2048 × 1024 canvas and every piece position, outline, and size. Fill every garment piece completely, including sleeves and hood. Keep the space outside pieces transparent. No shadows, gradients, texture, labels, guides, mockup, or 3D perspective. Keep logos and text centered away from seams. Return only the finished flat template PNG.`;
+  const aiPrompt = `Edit the uploaded HoodieGen PNG template into this design: ${idea || "[describe your hoodie]"}. Use at most ${colorLimit} flat solid colors, including the garment base. Keep the exact 2048 × 1024 canvas and every piece position, outline, and size. Use the Full coverage (V2) layout. Extend background patterns all the way to every piece edge; keep important logos inside the center. Fill every garment piece completely, including sleeves and hood. Keep the space outside pieces transparent. No shadows, gradients, texture, labels, guides, mockup, or 3D perspective. Keep logos and text centered away from seams. Return only the finished flat template PNG.`;
   const [d, setD] = useState<Design>(initial),
     [ready, setReady] = useState(false),
     [busy, setBusy] = useState(""),
@@ -147,7 +147,7 @@ export default function HoodieGen() {
       if(key==="map") {
         const counts=new Map<string,number>();
         for(let i=0;i<r.width*r.height;i++){const x=(i%r.width)/r.width*2048,y=Math.floor(i/r.width)/r.height*1024;
-          if(r.data[i*4+3]<128 || !panels.some(p=>x>p.x+p.w*.27&&x<p.x+p.w*.73&&y>p.y+p.h*.12&&y<p.y+p.h*.95))continue;
+          if(r.data[i*4+3]<128 || !(d.mapLayout===1?legacyPanels:panels).some(p=>x>p.x+p.w*.27&&x<p.x+p.w*.73&&y>p.y+p.h*.12&&y<p.y+p.h*.95))continue;
           const c="#"+Array.from(r.data.slice(i*4,i*4+3)).map(v=>v.toString(16).padStart(2,"0")).join("");counts.set(c,(counts.get(c)||0)+1);
         }
         const dominant=[...counts].sort((a,b)=>b[1]-a[1])[0]?.[0];
@@ -520,7 +520,7 @@ export default function HoodieGen() {
                   </label>
                 </>
               )}
-              {d.mode==="map" && <div>
+              {d.mode==="map" && <div><label className="hoodie-range">Template layout<select aria-label="Template layout" value={d.mapLayout??2} onChange={e=>patch({mapLayout:+e.target.value})}><option value={2}>Full coverage (V2)</option><option value={1}>Original narrow template (V1)</option></select></label><small>Download the new V2 template for wider coverage. Older maps need V1; regenerate artwork on V2 to fill the sides and hood.</small>
                 <label className="hoodie-range">Artwork size · {Math.round((d.mapScale??1)*100)}%
                   <input aria-label="Map artwork size" type="range" min="0.5" max="2" step="0.05" value={d.mapScale??1} onChange={e=>patch({mapScale:+e.target.value})}/>
                 </label>

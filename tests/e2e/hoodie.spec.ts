@@ -2,6 +2,9 @@ import { test, expect } from "@playwright/test";
 test("HoodieGen home and two design paths", async ({ page }) => {
   test.setTimeout(120000);
   await page.goto("/");
+  const photo=page.locator(".hoodie-home-art img");
+  await expect(photo).toBeVisible();
+  await expect.poll(()=>photo.evaluate((img:HTMLImageElement)=>img.naturalWidth)).toBeGreaterThan(0);
   await page.getByRole("link", { name: /HoodieGen/ }).click();
   await expect(
     page.getByRole("heading", { name: "A hoodie. Your style." }),
@@ -10,6 +13,7 @@ test("HoodieGen home and two design paths", async ({ page }) => {
     page.getByRole("button", { name: "Download 3MF", exact: true }),
   ).toBeEnabled({ timeout: 90000 });
   await page.getByRole("button", { name: "Surface map Advanced" }).click();
+  await expect(page.getByLabel("Template layout")).toHaveValue("2");
   const dl = page.waitForEvent("download");
   await page.getByRole("button", { name: "Download map template" }).click();
   expect((await dl).suggestedFilename()).toBe("HoodieGen-map-template.svg");
