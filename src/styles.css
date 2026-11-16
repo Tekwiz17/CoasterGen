@@ -3231,3 +3231,7 @@ fieldset.import-settings {
   font-size: 11px;
   color: #5f775e;
 }
+
+.split-bambu-button {
+  margin-top: 10px;
+}

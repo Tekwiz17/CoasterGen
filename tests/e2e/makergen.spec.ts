@@ -214,3 +214,55 @@ test("connection view reveals fit geometry with adjustable spacing and detail", 
     ),
   ).toBe(true);
 });
+
+test("one 3MF keeps every body and Bambu Studio uses the same project", async ({
+  page,
+}) => {
+  test.setTimeout(120000);
+  await page.addInitScript(() => {
+    const click = HTMLAnchorElement.prototype.click;
+    HTMLAnchorElement.prototype.click = function () {
+      if (this.href.startsWith("bambustudio:")) {
+        document.documentElement.dataset.studioLaunch = "requested";
+        return;
+      }
+      click.call(this);
+    };
+  });
+  await page.goto("/#/splitgen");
+  await page
+    .getByRole("button", { name: "Try a sample model", exact: true })
+    .click();
+  const button = page.getByRole("button", {
+    name: "Download 3MF",
+    exact: true,
+  });
+  await expect(button).toBeEnabled({ timeout: 60000 });
+  await page.getByLabel("Inspect part", { exact: true }).selectOption("1");
+  const file = page.waitForEvent("download");
+  await button.click();
+  const downloaded = await file;
+  expect(downloaded.suggestedFilename()).toMatch(/-SplitGen\.3mf$/);
+  const parts = read3mf(await readFile((await downloaded.path())!));
+  expect(parts).toHaveLength(2);
+  expect(parts.map((p) => p.name)).toEqual(["Body", "Accent"]);
+  await page
+    .getByRole("button", { name: "Open in Bambu Studio", exact: true })
+    .click();
+  const modal = page.getByRole("dialog");
+  await expect(
+    modal.getByRole("heading", { name: "Open your parts in Bambu Studio" }),
+  ).toBeVisible();
+  const second = page.waitForEvent("download");
+  await modal
+    .getByRole("button", { name: "Download & launch Studio", exact: true })
+    .click();
+  expect(read3mf(await readFile((await (await second).path())!))).toHaveLength(
+    2,
+  );
+  await expect(page.locator("html")).toHaveAttribute(
+    "data-studio-launch",
+    "requested",
+  );
+  await expect(modal.getByRole("status")).toContainText("Downloaded.");
+});

@@ -177,3 +177,26 @@ test("connection preview exposes mating faces and never changes exported geometr
     spread.model.parts.map((p) => p.indices.length),
   );
 });
+
+test("single 3MF project contains distinct named mesh bodies and filament assignments", () => {
+  const parts = splitModel(api, blocks(), "groups", "SnapFit", 0.2, 3).parts;
+  const files = unzipSync(part3mf(parts, "All parts", true));
+  const model = strFromU8(files["3D/3dmodel.model"]),
+    config = strFromU8(files["Metadata/model_settings.config"]);
+  assert.equal((model.match(/<mesh>/g) || []).length, 2);
+  assert.equal((model.match(/<component objectid=/g) || []).length, 2);
+  assert.equal((model.match(/<item objectid=/g) || []).length, 1);
+  assert.match(model, /name="Body"/);
+  assert.match(model, /name="Accent"/);
+  assert.equal((config.match(/<part id=/g) || []).length, 2);
+  assert.match(config, /key="extruder" value="2"/);
+  const loaded = read3mf(part3mf(parts, "All parts", true));
+  assert.deepEqual(
+    loaded.map((p) => p.name),
+    ["Body", "Accent"],
+  );
+  assert.deepEqual(
+    loaded.map((p) => p.color),
+    parts.map((p) => p.color),
+  );
+});
