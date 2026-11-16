@@ -21,6 +21,7 @@ export type Design = {
   remove: boolean;
   smooth: boolean;
   betaEdges?: boolean;
+  mapScale?: number;
 };
 export function paintCode(slot: number) {
   return slot < 3
@@ -154,6 +155,7 @@ export function colorHoodie(h: Hoodie, d: Design, pass = 0): {model:ModelData;sl
     return transparent[start + i] ? 0 : q!.labels[start + i];
   };
   const slots = new Uint8Array(h.faces.length);
+  let meshWidth=0;for(const p of h.points)meshWidth=Math.max(meshWidth,Math.abs(p[0])*2);
 
   h.faces.forEach((f, i) => {
     const a = h.points[f[0]],
@@ -169,7 +171,7 @@ export function colorHoodie(h: Hoodie, d: Design, pass = 0): {model:ModelData;sl
       ];
     let slot = 0;
     if (d.mode === "map" && n[0]*p[0]+n[1]*p[1] > 0) {
-      const uv = atlasUV(p[0], p[1], p[2], h.height, 125);
+      const uv = atlasUV(p[0], p[1], p[2], h.height, meshWidth, d.mapScale);
       slot = sample(d.map, uv[0], uv[1], 0);
     } else if (d.mode === "image") {
       const front = p[1] < 0;

@@ -239,7 +239,7 @@ export default function HoodieGen() {
                     detail
                   />
                 ) : (
-                  <ModelViewer smoothSurface
+                  <ModelViewer smoothSurface frontView
                     model={model}
                     project={{
                       ...DEFAULT_PROJECT,
@@ -520,6 +520,12 @@ export default function HoodieGen() {
                   </label>
                 </>
               )}
+              {d.mode==="map" && <div>
+                <label className="hoodie-range">Artwork size · {Math.round((d.mapScale??1)*100)}%
+                  <input aria-label="Map artwork size" type="range" min="0.5" max="2" step="0.05" value={d.mapScale??1} onChange={e=>patch({mapScale:+e.target.value})}/>
+                </label>
+                <small>Proportions stay locked. Increase size to fill more of each piece; artwork beyond the seams is cropped. Uncovered areas use the base color.</small>
+              </div>}
               <label className="hoodie-check"><input type="checkbox" checked={!!d.betaEdges} onChange={e=>patch({betaEdges:e.target.checked})}/> Smooth color edges (beta)</label>
               <small>Refines the mesh along color boundaries in both preview and 3MF. Takes longer and creates larger files.</small>
               <label className="hoodie-range">

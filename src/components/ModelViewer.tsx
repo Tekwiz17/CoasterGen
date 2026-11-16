@@ -11,6 +11,7 @@ interface Props {
   onFailure: () => void;
   trueColors?: boolean;
   smoothSurface?: boolean;
+  frontView?: boolean;
   detail?: boolean;
   azimuth?: number;
   label?: string;
@@ -24,6 +25,7 @@ export default function ModelViewer({
   onFailure,
   trueColors = false,
   smoothSurface = false,
+  frontView = false,
   detail = false,
   azimuth = 0,
   label = "Interactive 3D coaster preview. Drag to orbit; scroll to zoom.",
@@ -217,7 +219,8 @@ export default function ModelViewer({
     const d = project.diameter;
     const aspect = host.current!.clientWidth / host.current!.clientHeight;
     const factor = aspect < 1 ? 1 / aspect : 1;
-    s.camera.position.set(
+    if(frontView) s.camera.position.set(0, -d*3.1*factor/zoom, project.thickness*0.6);
+    else s.camera.position.set(
       (d * 0.64 * factor) / zoom,
       (-d * 1.15 * factor) / zoom,
       ((bottom ? -1 : 1) * d * 1.9 * factor) / zoom,
@@ -227,6 +230,6 @@ export default function ModelViewer({
     s.floor.visible = !bottom;
     s.controls.update();
     s.render();
-  }, [bottom, zoom, reset, project.diameter, azimuth]);
+  }, [bottom, zoom, reset, project.diameter, project.thickness, azimuth, frontView]);
   return <div ref={host} className="three-view" />;
 }

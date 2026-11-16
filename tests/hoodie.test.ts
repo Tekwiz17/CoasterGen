@@ -57,13 +57,13 @@ if (fixture)
     assert.match(strFromU8(out["Metadata/project_settings.config"]), /#ff0000/);
   });
 
-import { atlasUV, panels, mapTemplate } from "../src/lib/hoodiemap";
+import { atlasUV, panelPoint, panels, mapTemplate } from "../src/lib/hoodiemap";
 test("flattened atlas samples each named garment piece within its bounds", () => {
   const points = [
     [0, -10, 40],
     [0, 10, 40],
-    [50, -5, 40],
-    [-50, 5, 40],
+    [45, -25, 40],
+    [-45, 25, 40],
     [0, -10, 95],
     [0, 10, 95],
   ];
@@ -75,4 +75,21 @@ test("flattened atlas samples each named garment piece within its bounds", () =>
   });
   assert.match(mapTemplate(), /RIGHT SLEEVE/);
   assert.doesNotMatch(mapTemplate(false), /<text/);
+});
+
+test("body artwork keeps equal horizontal and vertical scale",()=>{
+ const p=panelPoint(0,-25,40,100,118),a=panelPoint(1,-25,40,100,118),b=panelPoint(0,-25,41,100,118);
+ assert.ok(Math.abs((a.u-p.u)*panels[0].w+(b.v-p.v)*panels[0].h)<1e-9);
+});
+test("mirrored sleeve points have identical local artwork coordinates",()=>{
+ for(const z of [15,30,50,70])for(const x of [38,43,50]){
+ const a=panelPoint(x,-25,z,106,118),b=panelPoint(-x,-25,z,106,118);
+ assert.equal(a.index,2);assert.equal(b.index,3);assert.equal(a.u,b.u);assert.equal(a.v,b.v);
+ }
+});
+test("zoom preserves aspect ratio and out-of-panel coordinates use base",()=>{
+ const a=panelPoint(5,-25,40,100,118,1),b=panelPoint(5,-25,40,100,118,2);
+ assert.ok(Math.abs((a.u-.5)/2-(b.u-.5))<1e-12);
+ assert.ok(Math.abs((a.v-.5)/2-(b.v-.5))<1e-12);
+ assert.deepEqual(atlasUV(30,-25,40,100,118),[-1,-1]);
 });

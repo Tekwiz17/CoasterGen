@@ -20,35 +20,47 @@ function span(kind: string, t: number): [number, number] {
   const half = Math.sqrt(Math.max(0, 1 - (1 - t) * (1 - t))) * 0.47;
   return [0.5 - half, 0.5 + half];
 }
-export function atlasUV(
-  x: number,
-  y: number,
-  z: number,
-  height: number,
-  width: number,
-) {
-  const t = Math.max(0, Math.min(0.999999, z / height));
-  let index: number, u: number, v: number;
-  if (t > 0.78 && Math.abs(x) < 34) {
-    index = y < 0 ? 4 : 5;
-    u = (y < 0 ? x : -x) / 68 + 0.5;
-    v = (1 - t) / 0.22;
-  } else if (Math.abs(x) > 34) {
-    index = x > 0 ? 2 : 3;
-    u = y / Math.max(1, width * 0.4) + 0.5;
-    v = 1 - t;
+/**
+ * Map distances, not normalized rectangles. Each panel uses one pixels/mm
+ * scale in both axes. Uncovered garment stays base-colored.
+ * Sleeve coordinates are mirrored around the same centerline on both arms.
+ */
+export function panelPoint(x:number,y:number,z:number,height:number,width:number,zoom=1) {
+  const t=Math.max(0,Math.min(1,z/height));
+  const bodyHalf=width*0.288;
+  let index:number, across:number, down:number, physicalHeight:number;
+  if(t>0.78 && Math.abs(x)<bodyHalf) {
+    index=y<0?4:5;
+    across=y<0?x:-x;
+    physicalHeight=height*0.22;
+    down=height-z;
+  } else if(Math.abs(x)>bodyHalf) {
+    index=x>0?2:3;
+    // Both arms use the same arc coordinate. Folds in depth cannot shift
+    // one sleeve's design independently of the other.
+    const center=width*(0.39-0.07*t);
+    const radius=width*0.105;
+    const angle=Math.atan2((Math.abs(x)-center)/radius,Math.abs(y)/(width*0.25));
+    across=angle*radius;
+    physicalHeight=height*0.78;
+    down=height*0.82-z;
   } else {
-    index = y < 0 ? 0 : 1;
-    u = (y < 0 ? x : -x) / 68 + 0.5;
-    v = 1 - Math.min(t / 0.78, 1);
+    index=y<0?0:1;
+    across=y<0?x:-x;
+    physicalHeight=height*0.78;
+    down=physicalHeight-z;
   }
-  u = Math.max(0.001, Math.min(0.999, u));
-  v = Math.max(0.001, Math.min(0.999, v));
-  const p = panels[index];
-  return [
-    (p.x + p.w * (0.2 + u * 0.6)) / MAP_WIDTH,
-    (p.y + p.h * v) / MAP_HEIGHT,
-  ];
+  const p=panels[index];
+  const scale=physicalHeight/p.h*Math.max(0.5,Math.min(2,zoom));
+  return {index,u:0.5+across/(scale*p.w),v:0.5+(down-physicalHeight/2)/(scale*p.h)};
+}
+export function atlasUV(x:number,y:number,z:number,height:number,width:number,zoom=1) {
+  const {index,u,v}=panelPoint(x,y,z,height,width,zoom);
+  const p=panels[index];
+  if(v<0 || v>=1)return [-1,-1];
+  const [left,right]=span(p.kind,v);
+  if(u<left || u>right)return [-1,-1];
+  return [(p.x+p.w*u)/MAP_WIDTH,(p.y+p.h*v)/MAP_HEIGHT];
 }
 export function mapTemplate(guides = true) {
   const shapes = panels
