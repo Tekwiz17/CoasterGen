@@ -251,74 +251,53 @@ export function colorHoodie(h: Hoodie, d: Design, pass = 0): {model:ModelData;sl
   return { model, slots, colors, hoodie:h };
 }
 export function exportHoodie(h: Hoodie, slots: Uint8Array, colors: string[]) {
-  const files = { ...h.files };
-  let i = 0;
-  let sourceXml=h.xml;
-  const originalCount=(h.xml.match(/<triangle\s/g)||[]).length;
-  if(h.faces.length!==originalCount){
-    if((h.xml.match(/<mesh>/g)||[]).length!==1)throw Error("Beta refinement requires a single mesh.");
-    const match=h.xml.match(/<vertex\s+[^>]*x="([^"]+)"\s+y="([^"]+)"\s+z="([^"]+)"/);
-    if(!match)throw Error("Missing mesh origin.");
-    const offset=[+match[1]-h.points[0][0],+match[2]-h.points[0][1],+match[3]-h.points[0][2]];
-    const vertices=h.points.map(p=>'<vertex x="'+(p[0]+offset[0])+'" y="'+(p[1]+offset[1])+'" z="'+(p[2]+offset[2])+'"/>').join("");
-    const faces=h.faces.map(f=>'<triangle v1="'+f[0]+'" v2="'+f[1]+'" v3="'+f[2]+'"/>').join("");
-    const configKey="Metadata/model_settings.config";
-    if(files[configKey]) files[configKey]=strToU8(strFromU8(files[configKey]).replace(/face_count="\d+"/g,'face_count="'+h.faces.length+'"'));
-    sourceXml=h.xml.replace(/<vertices>[\s\S]*?<\/vertices>/,"<vertices>"+vertices+"</vertices>").replace(/<triangles>[\s\S]*?<\/triangles>/,"<triangles>"+faces+"</triangles>");
+  if (!h.points.length || !h.faces.length) throw Error("The hoodie has no geometry to export.");
+  if (!colors.length || colors.some(c => !/^#[0-9a-f]{6}$/i.test(c)))
+    throw Error("Choose at least one valid filament color before exporting.");
+  if (slots.length !== h.faces.length || slots.some(s => s >= colors.length))
+    throw Error("The hoodie colors are out of date. Generate the preview again.");
+
+  // Write a new project, never copy the source archive's sliced plate records,
+  // printer presets, relationships, or assembly/part IDs into a changed mesh.
+  const origin = h.xml.match(/<vertex\s+[^>]*x="([^"]+)"\s+y="([^"]+)"\s+z="([^"]+)"/);
+  const offset = origin ? [+origin[1]-h.points[0][0], +origin[2]-h.points[0][1], +origin[3]-h.points[0][2]] : [0,0,0];
+  const vertices = h.points.map(p => '<vertex x="'+(p[0]+offset[0])+'" y="'+(p[1]+offset[1])+'" z="'+(p[2]+offset[2])+'"/>').join("\n");
+  const triangles = h.faces.map((f,i) => '<triangle v1="'+f[0]+'" v2="'+f[1]+'" v3="'+f[2]+'" paint_color="'+paintCode(slots[i]+1)+'"/>').join("\n");
+  const transform = h.xml.match(/<item\b[^>]*\btransform="([^"]+)"/)?.[1] ?? "1 0 0 0 1 0 0 0 1 0 0 0";
+  const attribution = [...h.xml.matchAll(/<metadata\b[^>]*\/?>(?:[^<]*<\/metadata>)?/g)]
+    .map(m=>m[0]).filter(m=>!/name="(?:Application|BambuStudio:3mfVersion|HoodieGen|Profile[^"]*|ModelPreview[^"]*)"/.test(m)).join("\n");
+  const model = '<?xml version="1.0" encoding="UTF-8"?>\n'
+    + '<model unit="millimeter" xml:lang="en-US" xmlns="http://schemas.microsoft.com/3dmanufacturing/core/2015/02" xmlns:BambuStudio="http://schemas.bambulab.com/package/2021">\n'
+    + '<metadata name="Application">BambuStudio-02.01.01.52</metadata>\n<metadata name="BambuStudio:3mfVersion">1</metadata>\n'
+    + attribution + '\n<metadata name="HoodieGen">Made with HoodieGen on MakerGen. Original: Hoodie Pen Pot by Morganja.</metadata>\n'
+    + '<resources><object id="2" type="model"><mesh><vertices>\n'+vertices+'\n</vertices><triangles>\n'+triangles+'\n</triangles></mesh></object></resources>\n'
+    + '<build><item objectid="2" transform="'+transform+'"/></build></model>';
+  const config = '<?xml version="1.0" encoding="UTF-8"?>\n<config><object id="2"><metadata key="name" value="HoodieGen"/><metadata key="extruder" value="1"/><metadata face_count="'+h.faces.length+'"/>'
+    + '<part id="2" subtype="normal_part"><metadata key="name" value="Hoodie"/><metadata key="extruder" value="1"/><mesh_stat face_count="'+h.faces.length+'" edges_fixed="0" degenerate_facets="0" facets_removed="0" facets_reversed="0" backwards_edges="0"/></part></object>'
+    + '<plate><metadata key="plater_id" value="1"/><metadata key="plater_name" value="HoodieGen"/><metadata key="locked" value="false"/><model_instance><metadata key="object_id" value="2"/><metadata key="instance_id" value="0"/><metadata key="identify_id" value="1"/></model_instance></plate></config>';
+  const originalSettings = h.files["Metadata/project_settings.config"];
+  const settings: Record<string, unknown> = {
+    ...(originalSettings ? JSON.parse(strFromU8(originalSettings)) : {}),
+    name: "project_settings", version: "01.09.00.00", from: "User",
+    filament_colour: colors,
+    filament_settings_id: colors.map(()=>"Generic PLA"),
+    filament_type: colors.map(()=>"PLA"),
+    filament_diameter: colors.map(()=>"1.75"),
+    filament_density: colors.map(()=>"1.24"),
+  };
+  // Source profiles are single-filament. Expand per-filament values for every slot.
+  for (const [key,value] of Object.entries(settings)) {
+    if (key.startsWith("filament_") && Array.isArray(value) && value.length === 1)
+      settings[key] = colors.map(()=>value[0]);
   }
-  // Export the printable mesh directly. Some slicers reject an assembly-only
-  // build item when its Bambu part metadata points at the nested mesh.
-  const objects=[...sourceXml.matchAll(/<object\b[^>]*>[\s\S]*?<\/object>/g)];
-  const meshObject=objects.find(m=>m[0].includes("<mesh>"));
-  const assembly=objects.find(m=>m[0].includes("<components>"));
-  if(meshObject && assembly){
-    const meshId=meshObject[0].match(/\bid="(\d+)"/)?.[1];
-    const assemblyId=assembly[0].match(/\bid="(\d+)"/)?.[1];
-    const component=assembly[0].match(/<component\b[^>]*>/)?.[0];
-    if(!meshId || !assemblyId || !component?.includes('objectid="'+meshId+'"'))throw Error("Unsupported hoodie assembly.");
-    sourceXml=sourceXml.replace(meshObject[0],"").replace(assembly[0],meshObject[0].replace('id="'+meshId+'"','id="'+assemblyId+'"'));
-    const key="Metadata/model_settings.config";
-    if(files[key])files[key]=strToU8(strFromU8(files[key]).replace(new RegExp('<part id="'+meshId+'"','g'),'<part id="'+assemblyId+'"'));
-  }
-  files[h.key] = strToU8(
-    sourceXml
-      .replace(/<triangle\s[^>]*\/>/g, (t) =>
-        t
-          .replace(/\s(?:paint_color|p1|p2|p3|pid)="[^"]*"/g, "")
-          .replace("/>", ` paint_color="${paintCode(slots[i++] + 1)}"/>`),
-      )
-      .replace(
-        "<resources>",
-        `<metadata name="HoodieGen">Made with HoodieGen on MakerGen. Original: Hoodie Pen Pot by Morganja. ${BASE_URL.replaceAll("&", "&amp;")}</metadata><resources>`,
-      ),
-  );
-  const settings = JSON.parse(
-    strFromU8(files["Metadata/project_settings.config"]),
-  );
-  settings.filament_colour = colors;
-  for (const key of [
-    "filament_type",
-    "filament_diameter",
-    "filament_density",
-    "filament_settings_id",
-  ])
-    settings[key] = colors.map(() =>
-      key === "filament_type"
-        ? "PLA"
-        : key === "filament_diameter"
-          ? "1.75"
-          : key === "filament_density"
-            ? "1.24"
-            : "Generic PLA",
-    );
-  files["Metadata/project_settings.config"] = strToU8(JSON.stringify(settings));
-  for (const key of Object.keys(files))
-    if (
-      /\.gcode|Metadata\/(?:plate_\d+\.(?:png|json)|top_\d+\.png|pick_\d+\.png|slice_info\.config)/.test(
-        key,
-      )
-    )
-      delete files[key];
-  files["HoodieGen-credits.txt"] = strToU8(CREDIT);
-  return zipSync(files, { level: 6 });
+  settings.flush_volumes_matrix = colors.flatMap((_,i)=>colors.map((_,j)=>i===j?"0":"140"));
+  settings.flush_volumes_vector = colors.flatMap(()=>["140","140"]);
+  return zipSync({
+    "[Content_Types].xml": strToU8('<?xml version="1.0" encoding="UTF-8"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="model" ContentType="application/vnd.ms-package.3dmanufacturing-3dmodel+xml"/><Default Extension="config" ContentType="application/octet-stream"/><Default Extension="txt" ContentType="text/plain"/></Types>'),
+    "_rels/.rels": strToU8('<?xml version="1.0" encoding="UTF-8"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Target="/3D/3dmodel.model" Id="rel-1" Type="http://schemas.microsoft.com/3dmanufacturing/2013/01/3dmodel"/></Relationships>'),
+    "3D/3dmodel.model": strToU8(model),
+    "Metadata/model_settings.config": strToU8(config),
+    "Metadata/project_settings.config": strToU8(JSON.stringify(settings)),
+    "HoodieGen-credits.txt": strToU8(CREDIT),
+  }, {level:6});
 }

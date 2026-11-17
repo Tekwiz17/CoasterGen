@@ -32,7 +32,7 @@ const bytes=exportHoodie({xml,key,points:r.points,faces:r.faces,height:1,files:{
 const files=unzipSync(bytes),out=strFromU8(files[key]);
 assert.ok(out.includes('<vertex x="10" y="20" z="30"/>'));
 assert.equal(loadHoodie(bytes).faces.length,r.faces.length);
-assert.equal(strFromU8(files["Metadata/model_settings.config"]),'<mesh_stat face_count="'+r.faces.length+'"/>');
+assert.ok(strFromU8(files["Metadata/model_settings.config"]).includes('<mesh_stat face_count="'+r.faces.length+'"'));
 assert.deepEqual([...out.matchAll(/paint_color="([^"]+)"/g)].map(m=>m[1]),Array.from(slots,s=>paintCode(s+1)));
 });
 
@@ -52,4 +52,24 @@ test("budgeted refinement keeps shared edges closed",()=>{
   for(const face of r.faces)for(let j=0;j<3;j++){const a=face[j],b=face[(j+1)%3],k=Math.min(a,b)+":"+Math.max(a,b);edges.set(k,(edges.get(k)||0)+1);}
   assert.ok([...edges.values()].every(n=>n===2));
  }
+});
+
+test("3MF export rebuilds project references and rejects missing palettes",()=>{
+ const points=[[0,0,0],[1,0,0],[0,1,0]], faces=[[0,1,2]], key="3D/3dmodel.model";
+ const h={points,faces,height:1,key,xml:'<model><metadata name="License">Original license</metadata></model>',files:{
+  "Metadata/project_settings.config":strToU8(JSON.stringify({filament_colour:["#ffffff"],filament_flow_ratio:["0.98"]})),
+  "Metadata/plate_1.json":strToU8("stale"),"Metadata/model_settings.config":strToU8("stale")
+ }};
+ assert.throws(()=>exportHoodie(h,new Uint8Array([0]),[]),/filament color/);
+ assert.throws(()=>exportHoodie(h,new Uint8Array([2]),["#ffffff"]),/out of date/);
+ const files=unzipSync(exportHoodie(h,new Uint8Array([1]),["#ffffff","#123456"]));
+ const settings=JSON.parse(strFromU8(files["Metadata/project_settings.config"]));
+ assert.deepEqual(settings.filament_colour,["#ffffff","#123456"]);
+ assert.deepEqual(settings.filament_flow_ratio,["0.98","0.98"]);
+ assert.equal(settings.flush_volumes_matrix.length,4);
+ assert.ok(!files["Metadata/plate_1.json"]);
+ assert.ok(strFromU8(files[key]).includes('name="License">Original license'));
+ const cfg=strFromU8(files["Metadata/model_settings.config"]);
+ assert.ok(cfg.includes('<part id="2"'));assert.ok(cfg.includes('key="object_id" value="2"'));
+ assert.ok(!cfg.includes("thumbnail"));
 });
