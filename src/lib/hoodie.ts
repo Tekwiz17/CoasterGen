@@ -266,6 +266,20 @@ export function exportHoodie(h: Hoodie, slots: Uint8Array, colors: string[]) {
     if(files[configKey]) files[configKey]=strToU8(strFromU8(files[configKey]).replace(/face_count="\d+"/g,'face_count="'+h.faces.length+'"'));
     sourceXml=h.xml.replace(/<vertices>[\s\S]*?<\/vertices>/,"<vertices>"+vertices+"</vertices>").replace(/<triangles>[\s\S]*?<\/triangles>/,"<triangles>"+faces+"</triangles>");
   }
+  // Export the printable mesh directly. Some slicers reject an assembly-only
+  // build item when its Bambu part metadata points at the nested mesh.
+  const objects=[...sourceXml.matchAll(/<object\b[^>]*>[\s\S]*?<\/object>/g)];
+  const meshObject=objects.find(m=>m[0].includes("<mesh>"));
+  const assembly=objects.find(m=>m[0].includes("<components>"));
+  if(meshObject && assembly){
+    const meshId=meshObject[0].match(/\bid="(\d+)"/)?.[1];
+    const assemblyId=assembly[0].match(/\bid="(\d+)"/)?.[1];
+    const component=assembly[0].match(/<component\b[^>]*>/)?.[0];
+    if(!meshId || !assemblyId || !component?.includes('objectid="'+meshId+'"'))throw Error("Unsupported hoodie assembly.");
+    sourceXml=sourceXml.replace(meshObject[0],"").replace(assembly[0],meshObject[0].replace('id="'+meshId+'"','id="'+assemblyId+'"'));
+    const key="Metadata/model_settings.config";
+    if(files[key])files[key]=strToU8(strFromU8(files[key]).replace(new RegExp('<part id="'+meshId+'"','g'),'<part id="'+assemblyId+'"'));
+  }
   files[h.key] = strToU8(
     sourceXml
       .replace(/<triangle\s[^>]*\/>/g, (t) =>

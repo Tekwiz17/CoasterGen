@@ -53,6 +53,9 @@ if (fixture)
     assert.equal((xml.match(/<vertex /g) || []).length, h.points.length);
     assert.match(xml, /paint_color="8"/);
     assert.match(xml, /Morganja/);
+    assert.doesNotMatch(xml, /<components>/);
+    assert.match(xml, /<object id="2"[^>]*>[\s\S]*?<mesh>/);
+    assert.match(strFromU8(out["Metadata/model_settings.config"]), /<part id="2"/);
     assert.equal(strFromU8(out["HoodieGen-credits.txt"]), CREDIT);
     assert.match(strFromU8(out["Metadata/project_settings.config"]), /#ff0000/);
   });
