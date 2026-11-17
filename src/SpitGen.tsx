@@ -1,3 +1,4 @@
+import GenerationStatus from "./components/GenerationStatus";
 import Modal from "./components/Modal";
 import { BambuLogo } from "./components/BrandIcons";
 import { splitPreview } from "./lib/splitpreview";
@@ -151,6 +152,7 @@ export default function SplitGen() {
   }
   return (
     <>
+      <GenerationStatus active={busy || busyExport} message={busyExport?"Preparing your download…":progress}/>
       <div inert={bambuOpen}>
         <MakerHeader tool="SplitGen" />
         <main className="spit-page">

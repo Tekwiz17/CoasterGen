@@ -1,3 +1,4 @@
+import GenerationStatus from "./components/GenerationStatus";
 import ImportDialog from "./components/ImportDialog";
 import type { Project, Artwork } from "./types";
 import { panels, layoutPanels, mapTemplate } from "./lib/hoodiemap";
@@ -188,6 +189,7 @@ export default function HoodieGen() {
   const place = side === "front" ? "frontPlace" : "backPlace";
   return (
     <>
+      <GenerationStatus active={!!busy} message={busy}/>
       <MakerHeader tool="HoodieGen" />
       {editing && <ImportDialog context="hoodie" source={editing.source} name={editing.name}
         project={{...DEFAULT_PROJECT, source:editing.source, colors:d.colors, colorCount:d.colors.length, removeBackground:true, detail:1024, smoothEdges:true, preserveDetails:false}}

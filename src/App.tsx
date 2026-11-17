@@ -1,3 +1,4 @@
+import GenerationStatus from "./components/GenerationStatus";
 import { MakerMark } from "./MakerGen";
 import { lazy, Suspense, useEffect, useRef, useState } from "react";
 import {
@@ -361,6 +362,7 @@ export default function App() {
 
   return (
     <>
+      <GenerationStatus active={processing || building || exporting || reading || readingShape} message={exporting?"Preparing your download…":reading || readingShape?"Reading your file…":status}/>
       <div className="app-shell" inert={modalOpen}>
         <header className="site-header">
           <a className="brand" href="#/" aria-label="MakerGen home">
