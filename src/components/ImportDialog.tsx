@@ -37,7 +37,7 @@ export default function ImportDialog({
   name: string;
   project: Project;
   preservePlacement?: boolean;
-  context?: "coaster" | "hoodie";
+  context?: "coaster" | "hoodie" | "bookmark";
   onClose: () => void;
   onApply: (project: Project, artwork: Artwork) => void;
 }) {
@@ -482,7 +482,7 @@ export default function ImportDialog({
         </figure>
         <figure>
           <div className="import-after">
-            {shown && context === "hoodie" ? <ArtworkPreview artwork={shown.art} colors={shown.colors} mapping={shown.mapping} /> : shown ? (
+            {shown && context !== "coaster" ? <ArtworkPreview artwork={shown.art} colors={shown.colors} mapping={shown.mapping} /> : shown ? (
               <FlatPreview
                 project={{ ...next, showGuides: false }}
                 artwork={shown.art}
@@ -507,7 +507,7 @@ export default function ImportDialog({
               ? "Live preview"
               : !current
                 ? "Updating colors…"
-                : `${context === "hoodie" ? "Artwork preview" : "Coaster preview"} · ${count} colors`}
+                : `${context !== "coaster" ? "Artwork preview" : "Coaster preview"} · ${count} colors`}
           </figcaption>
         </figure>
       </div>

@@ -34,7 +34,7 @@ export function surfaceUV(x: number, y: number, z: number, height: number) {
   const a = (Math.atan2(x, -y) + Math.PI * 2) % (Math.PI * 2);
   return [(a / (Math.PI * 2) + 0.125) % 1, 1 - z / height];
 }
-export function loadHoodie(bytes: Uint8Array) {
+export function loadHoodie(bytes: Uint8Array, expectedName = "Hoodie Pen Pot") {
   let total = 0;
   const files = unzipSync(bytes, {
     filter: (f) => {
@@ -60,7 +60,7 @@ export function loadHoodie(bytes: Uint8Array) {
       /<triangle\s+[^>]*v1="(\d+)"\s+v2="(\d+)"\s+v3="(\d+)"[^>]*\/>/g,
     ),
   ].map((m) => [+m[1], +m[2], +m[3]]);
-  if (!verts.length || !faces.length || !xml.includes("Hoodie Pen Pot"))
+  if (!verts.length || !faces.length || !xml.includes(expectedName))
     throw Error("Please choose the original Hoodie Pen Pot 3MF linked above.");
   if (
     verts.some((v) => !v.every(Number.isFinite)) ||
@@ -250,7 +250,7 @@ export function colorHoodie(h: Hoodie, d: Design, pass = 0): {model:ModelData;sl
   };
   return { model, slots, colors, hoodie:h };
 }
-export function exportHoodie(h: Hoodie, slots: Uint8Array, colors: string[]) {
+export function exportHoodie(h: Hoodie, slots: Uint8Array, colors: string[], branding = { name: "HoodieGen", part: "Hoodie", original: "Hoodie Pen Pot by Morganja", credit: CREDIT }) {
   if (!h.points.length || !h.faces.length) throw Error("The hoodie has no geometry to export.");
   if (!colors.length || colors.some(c => !/^#[0-9a-f]{6}$/i.test(c)))
     throw Error("Choose at least one valid filament color before exporting.");
@@ -269,12 +269,12 @@ export function exportHoodie(h: Hoodie, slots: Uint8Array, colors: string[]) {
   const model = '<?xml version="1.0" encoding="UTF-8"?>\n'
     + '<model unit="millimeter" xml:lang="en-US" xmlns="http://schemas.microsoft.com/3dmanufacturing/core/2015/02" xmlns:BambuStudio="http://schemas.bambulab.com/package/2021">\n'
     + '<metadata name="Application">BambuStudio-02.01.01.52</metadata>\n<metadata name="BambuStudio:3mfVersion">1</metadata>\n'
-    + attribution + '\n<metadata name="HoodieGen">Made with HoodieGen on MakerGen. Original: Hoodie Pen Pot by Morganja.</metadata>\n'
+    + attribution + '\n<metadata name="'+branding.name+'">Made with '+branding.name+' on MakerGen. Original: '+branding.original+'.</metadata>\n'
     + '<resources><object id="2" type="model"><mesh><vertices>\n'+vertices+'\n</vertices><triangles>\n'+triangles+'\n</triangles></mesh></object></resources>\n'
     + '<build><item objectid="2" transform="'+transform+'"/></build></model>';
-  const config = '<?xml version="1.0" encoding="UTF-8"?>\n<config><object id="2"><metadata key="name" value="HoodieGen"/><metadata key="extruder" value="1"/><metadata face_count="'+h.faces.length+'"/>'
-    + '<part id="2" subtype="normal_part"><metadata key="name" value="Hoodie"/><metadata key="extruder" value="1"/><mesh_stat face_count="'+h.faces.length+'" edges_fixed="0" degenerate_facets="0" facets_removed="0" facets_reversed="0" backwards_edges="0"/></part></object>'
-    + '<plate><metadata key="plater_id" value="1"/><metadata key="plater_name" value="HoodieGen"/><metadata key="locked" value="false"/><model_instance><metadata key="object_id" value="2"/><metadata key="instance_id" value="0"/><metadata key="identify_id" value="1"/></model_instance></plate></config>';
+  const config = '<?xml version="1.0" encoding="UTF-8"?>\n<config><object id="2"><metadata key="name" value="'+branding.name+'"/><metadata key="extruder" value="1"/><metadata face_count="'+h.faces.length+'"/>'
+    + '<part id="2" subtype="normal_part"><metadata key="name" value="'+branding.part+'"/><metadata key="extruder" value="1"/><mesh_stat face_count="'+h.faces.length+'" edges_fixed="0" degenerate_facets="0" facets_removed="0" facets_reversed="0" backwards_edges="0"/></part></object>'
+    + '<plate><metadata key="plater_id" value="1"/><metadata key="plater_name" value="'+branding.name+'"/><metadata key="locked" value="false"/><model_instance><metadata key="object_id" value="2"/><metadata key="instance_id" value="0"/><metadata key="identify_id" value="1"/></model_instance></plate></config>';
   const originalSettings = h.files["Metadata/project_settings.config"];
   const settings: Record<string, unknown> = {
     ...(originalSettings ? JSON.parse(strFromU8(originalSettings)) : {}),
@@ -298,6 +298,6 @@ export function exportHoodie(h: Hoodie, slots: Uint8Array, colors: string[]) {
     "3D/3dmodel.model": strToU8(model),
     "Metadata/model_settings.config": strToU8(config),
     "Metadata/project_settings.config": strToU8(JSON.stringify(settings)),
-    "HoodieGen-credits.txt": strToU8(CREDIT),
+    [branding.name + "-credits.txt"]: strToU8(branding.credit),
   }, {level:6});
 }

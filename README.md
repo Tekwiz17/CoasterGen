@@ -106,3 +106,13 @@ SplitGen’s **Download 3MF** saves every generated piece as a separate named bo
 Open `/#/hoodiegen`. The supplied base loads automatically from Morganja's original [Hoodie Pen Pot](https://makerworld.com/en/models/2074420-hoodie-pen-pot#profileId-2240823) 3MF. The supplied 3MF is bundled with the app. Its Standard Digital File License still applies.
 
 Image mode projects independent front/back artwork with adjustable width and position. Surface map mode downloads an editable 2048 × 1024 SVG layout with shaped front/back pieces, detached tapered sleeves and separate hood panels; remove guides before importing. The sampler uses the same piece layout as the SVG. A blank version without guides is also available; check artwork at folds and seams in the preview. Both modes share CoasterGen's palette matcher and support 2–8 filament colors. Preview uses the same triangle assignments as export. The exporter preserves original geometry and attribution, writes Bambu facet paint and filament slots, and includes HoodieGen and Morganja credits. Inspect the result and reslice in Studio; no G-code is generated. MakerWorld handoff provides copyable required credits and a link to upload, subject to the base license.
+
+### BookmarkGen
+
+Open `/#/bookmarkgen`. The bundled [Blank Bookmark Kit by Tekwiz17](https://makerworld.com/en/models/2735879-blank-bookmark-kit#profileId-3033042) is CC0 and loads automatically. BookmarkGen is image-only; neither BookmarkGen nor HoodieGen asks for a base-model upload.
+
+Crop, clean up, and map artwork with the shared import editor. The image is centered on the circular head and initially fitted inside it with a clean rim. Size and rotation keep its center fixed; oversized artwork clips to the circle. Only the upper face is painted. Subdivision adds shared vertices without changing the source's shape, thickness, clip slot, or volume; top-face edges are refined to approximately 0.3 mm before sampling. Very small image details still depend on nozzle width and slicer settings.
+
+Download a painted Bambu 3MF with filament settings and original attribution. Studio handoff downloads the file and launches the app; open the downloaded project manually. MakerWorld handoff offers the file, copyable credits, and an upload link. No files are uploaded automatically. `tests/bookmark.test.ts` checks closed edges, bounds, volume, placement, transparency, and export contents.
+
+Homepage hoodie and bookmark illustrations are generated CGI assets based on the bundled model previews. The interactive editor renders the actual mesh.

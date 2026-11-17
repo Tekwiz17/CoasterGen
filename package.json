@@ -3,11 +3,10 @@
   "version": "1.0.0",
   "description": "A browser workbench for custom coasters and split-to-assemble 3D prints",
   "scripts": {
-    "predev": "node scripts/hoodie-thumbnail.mjs",
     "dev": "vite --host 0.0.0.0",
-    "build": "node scripts/hoodie-thumbnail.mjs && tsc -b && vite build",
+    "build": "tsc -b && vite build",
     "preview": "vite preview --host 0.0.0.0",
-    "test": "node --import tsx --test tests/geometry.test.ts tests/spitgen.test.ts tests/hoodie.test.ts tests/hoodie-beta.test.ts",
+    "test": "node --import tsx --test tests/geometry.test.ts tests/spitgen.test.ts tests/hoodie.test.ts tests/hoodie-beta.test.ts tests/bookmark.test.ts",
     "test:e2e": "playwright test",
     "format": "prettier --write src tests *.ts *.json README.md",
     "format:check": "prettier --check src tests *.ts *.json README.md"

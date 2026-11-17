@@ -73,7 +73,7 @@ export default function HoodieGen() {
       .then((r) => {
         if (!r.ok)
           throw Error(
-            "Could not download the default hoodie. Try loading a base 3MF below.",
+            "Could not download the default hoodie. Please reload the page to try again.",
           );
         return r.arrayBuffer();
       })
@@ -120,23 +120,8 @@ export default function HoodieGen() {
           if (id === revision.current) setBusy("");
         });
     }, 250);
-    return () => clearTimeout(timer);
+    return () => { clearTimeout(timer); revision.current++; };
   }, [d, ready]);
-  async function base(file: File) {
-    setBusy("Reading the hoodie…");
-    setError("");
-    try {
-      if (file.size > 40e6) throw Error("Choose a 3MF under 40 MB.");
-      setReady(false);
-      setModel(null);
-      await call("load", { bytes: new Uint8Array(await file.arrayBuffer()) });
-      setReady(true);
-    } catch (e) {
-      setError((e as Error).message);
-    } finally {
-      setBusy("");
-    }
-  }
   async function artwork(file: File, key: "front" | "back" | "map") {
     setBusy("Matching artwork…");
     setError("");
@@ -266,8 +251,7 @@ export default function HoodieGen() {
                   <Shirt size={72} />
                   <h2>{busy ? "Loading your hoodie…" : "Load the hoodie"}</h2>
                   <p>
-                    The original hoodie loads automatically. You can also choose
-                    its 3MF below. Your artwork stays on your device.
+                    The original hoodie loads automatically. Your artwork stays on your device.
                   </p>
                   <a
                     href={BASE_URL}
@@ -299,21 +283,6 @@ export default function HoodieGen() {
               {ready && (
                 <p role="status">Original hoodie loaded · Ready to design</p>
               )}
-              <label className="hoodie-upload">
-                <Upload size={18} />
-                {ready ? "Replace base 3MF" : "Choose base 3MF"}
-                <input
-                  aria-label="Base hoodie 3MF"
-                  type="file"
-                  accept=".3mf"
-                  disabled={!!busy}
-                  onChange={(e) => {
-                    const f = e.target.files?.[0];
-                    if (f) void base(f);
-                    e.target.value = "";
-                  }}
-                />
-              </label>
               <small>
                 Use the original{" "}
                 <a href={BASE_URL} target="_blank" rel="noreferrer">

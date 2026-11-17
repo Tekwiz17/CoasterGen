@@ -1,6 +1,7 @@
 import { GitHubLogo } from "./components/BrandIcons";
 import { lazy, Suspense, useEffect, useState } from "react";
 import { ArrowUpRight, ArrowRight, Layers3, Scissors } from "lucide-react";
+const BookmarkGen = lazy(() => import("./BookmarkGen"));
 const HoodieGen = lazy(() => import("./HoodieGen"));
 const CoasterGen = lazy(() => import("./App"));
 const SpitGen = lazy(() => import("./SpitGen"));
@@ -56,7 +57,7 @@ export default function MakerGen() {
     return () => removeEventListener("hashchange", update);
   }, []);
   useEffect(() => {
-    document.title = route.includes("hoodiegen")
+    document.title = route.includes("bookmarkgen") ? "BookmarkGen · MakerGen" : route.includes("hoodiegen")
       ? "HoodieGen · MakerGen"
       : route.includes("coastergen")
         ? "CoasterGen · MakerGen"
@@ -68,7 +69,7 @@ export default function MakerGen() {
     <Suspense
       fallback={<div className="maker-loading">Opening your workshop…</div>}
     >
-      {route === "#/hoodiegen" ? (
+      {route === "#/bookmarkgen" ? (<BookmarkGen />) : route === "#/hoodiegen" ? (
         <HoodieGen />
       ) : route === "#/coastergen" ? (
         <CoasterGen />
@@ -100,7 +101,7 @@ export default function MakerGen() {
             <section aria-label="MakerGen tools" className="maker-tools">
               <a className="maker-tool" href="#/hoodiegen">
                 <div className="tool-art hoodie-home-art" aria-hidden="true">
-                  <img src="/hoodie-home.png" alt="" style={{width:"100%",height:"100%",objectFit:"contain",padding:"24px 24px 42px"}} />
+                  <img src="/hoodie-render.png" alt="" style={{width:"100%",height:"100%",objectFit:"contain",padding:"24px 24px 42px"}} />
                   <span className="tool-tag">ARTWORK → HOODIE PEN POT</span>
                 </div>
                 <div className="tool-copy">
@@ -113,6 +114,13 @@ export default function MakerGen() {
                     Design a hoodie <ArrowRight size={18} />
                   </span>
                 </div>
+              </a>
+              <a className="maker-tool" href="#/bookmarkgen">
+                <div className="tool-art bookmark-home-art" aria-hidden="true">
+                  <img src="/bookmark-render.png" alt="" style={{width:"100%",height:"100%",objectFit:"contain",padding:"16px 24px 42px"}} />
+                  <span className="tool-tag">IMAGE → YOUR NEXT CHAPTER</span>
+                </div>
+                <div className="tool-copy"><h2>BookmarkGen</h2><p>A little art between the pages. Center your image on a slim bookmark, match your filaments, and make your mark.</p><span className="tool-open">Make a bookmark <ArrowRight size={18}/></span></div>
               </a>
               <a className="maker-tool" href="#/coastergen">
                 <div className="tool-art coaster-art" aria-hidden="true">
