@@ -11,7 +11,7 @@ export function ColorCount({
     <div className="color-budget">
       <div className="label-row">
         <strong>Total colors</strong>
-        <span>Includes the coaster base</span>
+        <span>Includes the base filament</span>
       </div>
       <div className="color-count" role="group" aria-label="Total colors">
         {[2, 3, 4, 5, 6, 7, 8].map((n) => (

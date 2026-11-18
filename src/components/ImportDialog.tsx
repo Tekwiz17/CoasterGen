@@ -32,6 +32,7 @@ export default function ImportDialog({
   context = "coaster",
   onClose,
   onApply,
+  onUsePixels,
 }: {
   source: string;
   name: string;
@@ -39,6 +40,7 @@ export default function ImportDialog({
   preservePlacement?: boolean;
   context?: "coaster" | "hoodie" | "bookmark";
   onClose: () => void;
+  onUsePixels?: (source: string, count: number) => void;
   onApply: (project: Project, artwork: Artwork) => void;
 }) {
   const [source, setSource] = useState(initialSource);
@@ -288,6 +290,10 @@ export default function ImportDialog({
           Quality
         </button>
       </div>
+      {onUsePixels && <div className="import-preset">
+        <div><strong>Keep original image detail</strong><p>Match the cropped source directly to {count} filaments. Keeps the background, shading, and fine lines. Paint edits apply only with “Use this image”.</p></div>
+        <button className="button light small" disabled={drawing || cropping} onClick={() => onUsePixels(source, count)}>Use source pixels</button>
+      </div>}
       <div className="cleanup-tools">
         <button
           className="button light small"

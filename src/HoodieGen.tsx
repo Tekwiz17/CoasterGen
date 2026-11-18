@@ -24,6 +24,7 @@ const initial: Design = {
 };
 export default function HoodieGen() {
   const [editing, setEditing] = useState<{source:string;name:string;key:"front"|"back"|"map"} | null>(null);
+  const [exactColors,setExactColors] = useState(false);
   const [colorLimit, setColorLimit] = useState(4);
   const [idea, setIdea] = useState("");
   const [promptCopied, setPromptCopied] = useState(false);
@@ -105,7 +106,7 @@ export default function HoodieGen() {
     const id = ++revision.current;
     setBusy("Updating preview…");
     const timer = setTimeout(() => {
-      call("paint", { design: d })
+      call("paint", { design: d, revision: id })
         .then((r) => {
           if (id === revision.current) {
             setModel(r.model);
@@ -152,7 +153,7 @@ export default function HoodieGen() {
     setBusy("Preparing your 3MF…");
     setError("");
     try {
-      const r = await call("export", { design: { ...d, auto: false, colors } });
+      const r = await call("export", { revision: revision.current });
       download(r.bytes, "HoodieGen.3mf", "model/3mf");
       if (launch) {
         const a = document.createElement("a");
@@ -178,6 +179,15 @@ export default function HoodieGen() {
       <MakerHeader tool="HoodieGen" />
       {editing && <ImportDialog context="hoodie" source={editing.source} name={editing.name}
         project={{...DEFAULT_PROJECT, source:editing.source, colors:d.colors, colorCount:d.colors.length, removeBackground:true, detail:1024, smoothEdges:true, preserveDetails:false}}
+        onUsePixels={editing.key === "map" ? undefined : async (source,count) => {
+          const key = editing.key;
+          setEditing(null); setBusy("Matching source pixels…");
+          try {
+            const raster = await loadPixels(source, 1024);
+            setSources(v => ({ ...v, [key]: source }));
+            setD(v => ({ ...v, [key]: raster, colors: Array.from({length:count},(_,i)=>v.colors[i] ?? "#ffffff"), auto:true, remove:false, smooth:false }));
+          } catch(e) {setError((e as Error).message);} finally {setBusy("");}
+        }}
         onClose={()=>setEditing(null)}
         onApply={(p:Project, art:Artwork)=>{
           if(editing.key==="map" && Math.abs(art.width/art.height-2)>0.02){setError("Surface maps must keep the 2:1 canvas. Reset the crop before applying.");return;}
@@ -228,7 +238,7 @@ export default function HoodieGen() {
                     detail
                   />
                 ) : (
-                  <ModelViewer smoothSurface frontView
+                  <ModelViewer trueColors={exactColors} smoothSurface frontView
                     model={model}
                     project={{
                       ...DEFAULT_PROJECT,
@@ -264,6 +274,7 @@ export default function HoodieGen() {
                 </div>
               )}
             </div>
+            {!fallback && <label className="hoodie-check"><input type="checkbox" checked={exactColors} onChange={e=>setExactColors(e.target.checked)}/> Show exact filament colors without lighting</label>}
             <p className="hoodie-caption">
               Drag to turn · Scroll to zoom · Color is printed on the existing
               surface

@@ -76,12 +76,9 @@ export default function PartsPreview({
           });
         }
       }
-      const scale = Math.min(
-          (width - 60) / (project.diameter * 1.732 || 1),
-          (height - 90) / (project.diameter * 0.84 + project.thickness || 1),
-        ),
-        cx = 0,
-        cy = -project.thickness / 2;
+      if (!faces.length) return;
+      const scale = 0.83 * Math.min(width / Math.max(1, maxX-minX), height / Math.max(1, maxY-minY));
+      const cx = (minX+maxX)/2, cy = (minY+maxY)/2;
       for (const face of faces.sort((a, b) => a.depth - b.depth)) {
         ctx.beginPath();
         face.points.forEach((p, j) => {
@@ -106,7 +103,7 @@ export default function PartsPreview({
     <canvas
       ref={ref}
       role="img"
-      aria-label="Basic isometric preview of separated model parts"
+      aria-label="Isometric preview of the generated model"
       style={{ width: "100%", height: "100%" }}
     />
   );

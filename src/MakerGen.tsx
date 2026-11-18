@@ -101,7 +101,7 @@ export default function MakerGen() {
             <section aria-label="MakerGen tools" className="maker-tools">
               <a className="maker-tool" href="#/hoodiegen">
                 <div className="tool-art hoodie-home-art" aria-hidden="true">
-                  <img src="/hoodie-render.png" alt="" style={{width:"100%",height:"100%",objectFit:"contain",padding:"24px 24px 42px"}} />
+                  <img src="/hoodie-render.webp" alt="" style={{width:"100%",height:"100%",objectFit:"contain",padding:"24px 24px 42px"}} />
                   <span className="tool-tag">ARTWORK → HOODIE PEN POT</span>
                 </div>
                 <div className="tool-copy">
@@ -117,7 +117,7 @@ export default function MakerGen() {
               </a>
               <a className="maker-tool" href="#/bookmarkgen">
                 <div className="tool-art bookmark-home-art" aria-hidden="true">
-                  <img src="/bookmark-render.png" alt="" style={{width:"100%",height:"100%",objectFit:"contain",padding:"16px 24px 42px"}} />
+                  <img src="/bookmark-render.webp" alt="" style={{width:"100%",height:"100%",objectFit:"contain",padding:"16px 24px 42px"}} />
                   <span className="tool-tag">IMAGE → YOUR NEXT CHAPTER</span>
                 </div>
                 <div className="tool-copy"><h2>BookmarkGen</h2><p>A little art between the pages. Center your image on a slim bookmark, match your filaments, and make your mark.</p><span className="tool-open">Make a bookmark <ArrowRight size={18}/></span></div>

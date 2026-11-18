@@ -95,7 +95,7 @@ export default function BookmarkGen() {
     setBusy("Coloring your bookmark…");
     const timer = setTimeout(
       () =>
-        call("paint", { design })
+        call("paint", { design, revision: id })
           .then((r) => {
             if (id === revision.current) {
               setModel(r.model);
@@ -135,7 +135,7 @@ export default function BookmarkGen() {
     setError("");
     try {
       const r = await call("export", {
-        design: { ...design, colors, auto: false },
+        revision: revision.current,
       });
       download(r.bytes, "BookmarkGen.3mf", "model/3mf");
       if (launch) {
@@ -250,7 +250,7 @@ export default function BookmarkGen() {
               ) : (
                 <div className="hoodie-empty">
                   <img
-                    src="/bookmark-render.png"
+                    src="/bookmark-render.webp"
                     alt="Rendered bookmark"
                     style={{ maxHeight: 280, maxWidth: "100%" }}
                   />

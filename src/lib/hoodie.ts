@@ -113,8 +113,8 @@ export function colorHoodie(h: Hoodie, d: Design, pass = 0): {model:ModelData;sl
   const q = valid.length
     ? quantize(
         pixels,
-        pixels.length / 4,
-        1,
+        valid.length === 1 ? valid[0].width : pixels.length / 4,
+        valid.length === 1 ? valid[0].height : 1,
         d.colors.length,
         baseColor,
         transparent,
